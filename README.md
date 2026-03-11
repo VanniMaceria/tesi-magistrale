@@ -1,5 +1,5 @@
 # tesi-magistrale
-This research project, developed as part of a Master's Thesis in Computer Science (IoT Curriculum), focuses on the challenges of deploying **Federated Learning (FL)** in resource-constrained environments. 
+This research project, developed as part of my Master's Thesis in Computer Science (IoT Curriculum), focuses on the challenges of deploying **Federated Learning (FL)** in resource-constrained environments. 
 
 While FL is widely adopted for privacy-preserving distributed learning, its execution on **Microcontroller Units (MCUs)** and low-power IoT devices remains a significant challenge due to hardware limitations in memory, processing power, and energy autonomy.
 
@@ -23,7 +23,7 @@ The core of the thesis involves the application of complexity-reduction techniqu
 * **Knowledge Distillation**: Utilizing "Teacher-Student" architectures to transfer knowledge to ultra-lightweight models.
 
 ## 🧪 Experimental Setup
-The project utilizes a simulation-driven approach to perform extensive stress tests. By varying parameters such as the number of participating clients, data distribution (IID vs. Non-IID), and local training intensity (epochs/rounds), the research seeks to identify the most "efficient" technique for IoT deployments—prioritizing energy and bandwidth savings even at the cost of marginal accuracy loss.
+The project utilizes a simulation-driven approach to perform tests. By varying parameters such as the number of participating clients, data distribution (IID vs. Non-IID), and local training intensity (epochs/rounds), the research seeks to identify the most "efficient" technique for IoT deployments—prioritizing energy and bandwidth savings even at the cost of marginal accuracy loss. [Flower](https://flower.ai/) is the framework that has been choosen to perform this task.
 
 ## 🛠️ Project Structure
 * **baseline_flower**: This directory hosts the **simulated federated environment**. It is designed to orchestrate decentralized training rounds and serve as the primary testbed for performance characterization. By executing various optimization strategies within this environment, we extract critical metrics such as global accuracy, communication overhead, and resource utilization, which are essential for the subsequent comparative analysis.
