@@ -1,0 +1,63 @@
+# --- AMBIENTE VIRTUALE ---
+.venv/
+venv/
+ENV/
+env/
+
+# --- PYTHON / CACHE ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# --- FLOWER / SIMULAZIONE (RAY) ---
+# Ray (usato da Flower) crea molte cartelle temporanee per i log e i checkpoint
+.flwr/
+cat_dog_results/
+*outputs/
+*results/
+.ray/
+ray_results/
+session_*/
+*.log
+*.sqlite
+
+# --- DATASETS ---
+# Non caricare mai i dataset (es. CIFAR-10, MNIST) su GitHub!
+# Se Flower li scarica in una sottocartella, aggiungila qui.
+data/
+datasets/
+*.zip
+*.tar.gz
+*.tgz
+
+# --- JUPYTER NOTEBOOKS ---
+.ipynb_checkpoints
+
+# --- VS CODE / IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- SISTEMA OPERATIVO ---
+.DS_Store
+Thumbs.db
