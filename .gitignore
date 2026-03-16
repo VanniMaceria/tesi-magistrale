@@ -33,7 +33,6 @@ MANIFEST
 .flwr/
 cat_dog_results/
 *outputs/
-*results/
 .ray/
 ray_results/
 session_*/
