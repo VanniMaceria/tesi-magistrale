@@ -11,7 +11,7 @@ The research follows a two-phase comparative approach:
 
 ### Phase 1: Baseline Characterization
 The development of a standard Federated Learning environment to establish a performance baseline. During this phase, key metrics are collected from uncompressed models, including:
-* **Global and Local Accuracy**.
+* **Global Accuracy**.
 * **Bandwidth Consumption**
 * **Computational Overhead**
 * **Theoretical Energy Impact**
