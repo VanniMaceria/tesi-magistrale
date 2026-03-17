@@ -30,5 +30,6 @@ fraction-evaluate = 0.5 # la metà dei client testa il modello
 local-epochs = 1
 learning-rate = 0.01
 batch-size = 32
+seed = 42
 
 # il numero dei client va cambiato nel file di configurazione dove Flower è installato

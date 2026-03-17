@@ -16,6 +16,14 @@ app = ClientApp()
 def train(msg: Message, context: Context):
     """Train the model on local data."""
 
+    current_seed = context.run_config.get("seed", 42)
+    batch_size = context.run_config["batch-size"]
+
+    # Leggi il seed e impostalo
+    current_seed = context.run_config.get("seed", 42)
+    from pytorchexample.task import set_all_seeds
+    set_all_seeds(current_seed)
+
     # Load the model and initialize it with the received weights
     model = Net()
     model.load_state_dict(msg.content["arrays"].to_torch_state_dict())
@@ -26,7 +34,7 @@ def train(msg: Message, context: Context):
     partition_id = context.node_config["partition-id"]
     num_partitions = context.node_config["num-partitions"]
     batch_size = context.run_config["batch-size"]
-    trainloader, _ = load_data(partition_id, num_partitions, batch_size)
+    trainloader, _ = load_data(partition_id, num_partitions, batch_size, current_seed)
 
     # Call the training function
     train_loss = train_fn(
@@ -52,6 +60,9 @@ def train(msg: Message, context: Context):
 def evaluate(msg: Message, context: Context):
     """Evaluate the model on local data."""
 
+    current_seed = context.run_config.get("seed", 42)
+    batch_size = context.run_config["batch-size"]
+
     # Load the model and initialize it with the received weights
     model = Net()
     model.load_state_dict(msg.content["arrays"].to_torch_state_dict())
@@ -62,7 +73,8 @@ def evaluate(msg: Message, context: Context):
     partition_id = context.node_config["partition-id"]
     num_partitions = context.node_config["num-partitions"]
     batch_size = context.run_config["batch-size"]
-    _, valloader = load_data(partition_id, num_partitions, batch_size)
+    current_seed = context.run_config.get("seed", 42) 
+    _, valloader = load_data(partition_id, num_partitions, batch_size, current_seed)
 
     # Call the evaluation function
     eval_loss, eval_acc = test_fn(

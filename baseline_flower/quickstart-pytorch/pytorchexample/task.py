@@ -39,6 +39,30 @@ fds = None  # Cache FederatedDataset
 
 pytorch_transforms = Compose([ToTensor(), Normalize((0.1307,), (0.3081,))])
 
+def set_all_seeds(seed):
+    """Set all random seeds to make results reproducible."""
+    import torch
+    import numpy as np
+    import random
+    
+    # Inizializza il generatore di numeri casuali standard di Python
+    random.seed(seed)
+    
+    # Inizializza il generatore di numeri casuali di NumPy (usato per i dataset)
+    np.random.seed(seed)
+    
+    # Imposta il seed per le operazioni PyTorch su CPU
+    torch.manual_seed(seed)
+    
+    # Imposta il seed per le operazioni PyTorch su GPU (se disponibile)
+    torch.cuda.manual_seed(seed)
+    
+    # Forza PyTorch a usare solo algoritmi deterministici (evita variazioni infinitesimali)
+    torch.backends.cudnn.deterministic = True
+    
+    # Disabilita la ricerca automatica dell'algoritmo di convoluzione più veloce, 
+    # che potrebbe introdurre variabilità tra un avvio e l'altro
+    torch.backends.cudnn.benchmark = False
 
 def apply_transforms(batch):
     """Apply transforms to the partition from FederatedDataset."""
@@ -46,22 +70,22 @@ def apply_transforms(batch):
     return batch
 
 
-def load_data(partition_id: int, num_partitions: int, batch_size: int):
+def load_data(partition_id: int, num_partitions: int, batch_size: int, seed: int = 42):   # seed va a 42 se non lo specifico da shell
     """Load partition ylecun/mnist data for clients."""
     # Only initialize `FederatedDataset` once
     global fds
     if fds is None:
-        #partitioner = IidPartitioner(num_partitions=num_partitions)
-        dirichlet_partitioner = DirichletPartitioner(num_partitions=num_partitions, alpha=0.1, partition_by="label")
+        partitioner = IidPartitioner(num_partitions=num_partitions)
+        #dirichlet_partitioner = DirichletPartitioner(num_partitions=num_partitions, alpha=0.1, partition_by="label")
         fds = FederatedDataset(
             dataset="ylecun/mnist",
-            partitioners={"train": dirichlet_partitioner},
+            partitioners={"train": partitioner},
         )
     partition = fds.load_partition(partition_id)
     #MNIST dataset has "image" column, but our model expects "img" column, so we rename it here
     partition = partition.rename_column("image", "img")
     # Divide data on each node: 80% train, 20% test
-    partition_train_test = partition.train_test_split(test_size=0.2, seed=42)
+    partition_train_test = partition.train_test_split(test_size=0.2, seed=seed)
     # Construct dataloaders
     partition_train_test = partition_train_test.with_transform(apply_transforms)
     trainloader = DataLoader(

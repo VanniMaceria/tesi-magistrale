@@ -15,10 +15,17 @@ app = ServerApp()
 def main(grid: Grid, context: Context) -> None:
     """Main entry point for the ServerApp."""
 
-    # Read run config
-    fraction_evaluate: float = context.run_config["fraction-evaluate"]
-    num_rounds: int = context.run_config["num-server-rounds"]
-    lr: float = context.run_config["learning-rate"]
+    # 1. Legge il seed dal terminale (se manca usa 42)
+    current_seed = context.run_config.get("seed", 42)
+    
+    # Imposta i seed globali
+    from pytorchexample.task import set_all_seeds
+    set_all_seeds(current_seed)
+
+    # 2. Legge gli altri parametri dal TOML (context.run_config li contiene già)
+    num_rounds = context.run_config["num-server-rounds"]
+    fraction_evaluate = context.run_config["fraction-evaluate"]
+    lr = context.run_config["learning-rate"]
 
     # Load global model
     global_model = Net()
