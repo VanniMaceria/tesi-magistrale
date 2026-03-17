@@ -25,8 +25,10 @@ serverapp = "pytorchexample.server_app:app"
 clientapp = "pytorchexample.client_app:app"
 
 [tool.flwr.app.config]
-num-server-rounds = 5
-fraction-evaluate = 0.5
+num-server-rounds = 3
+fraction-evaluate = 0.5 # la metà dei client testa il modello
 local-epochs = 1
 learning-rate = 0.01
 batch-size = 32
+
+# il numero dei client va cambiato nel file di configurazione dove Flower è installato
