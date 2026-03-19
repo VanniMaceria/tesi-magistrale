@@ -138,3 +138,27 @@ def test(net, testloader, device):
     accuracy = correct / len(testloader.dataset)
     loss = loss / len(testloader)
     return loss, accuracy
+
+def get_model_iot_metrics():
+    """Calcola i parametri totali e i FLOPs per una singola inferenza."""
+    try:
+        from thop import profile
+        import torch
+    except ImportError:
+        print("\n[ERRORE] Libreria 'thop' mancante. Esegui: pip install thop\n")
+        return 0, 0
+    
+    # 1. Inizializza il modello temporaneamente su CPU
+    model = Net()
+    model_cpu = model.to('cpu')
+    
+    # 2. Crea un input finto della dimensione di un'immagine MNIST (1 canale, 28x28)
+    dummy_input = torch.randn(1, 1, 28, 28)
+    
+    # 3. Calcola MACs (Multiply-Accumulate) e Parametri (verbose=False nasconde i log di thop)
+    macs, params = profile(model_cpu, inputs=(dummy_input, ), verbose=False)
+    
+    # 4. Converti MACs in FLOPs (1 MAC = 1 Moltiplicazione + 1 Addizione = 2 FLOPs)
+    flops = macs * 2 
+    
+    return int(params), int(flops)

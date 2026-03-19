@@ -27,7 +27,7 @@ clientapp = "pytorchexample.client_app:app"
 [tool.flwr.app.config]
 num-server-rounds = 3
 fraction-evaluate = 0.5 # la metà dei client testa il modello
-local-epochs = 1
+local-epochs = 1  # numero di volte che un client addestra il proprio modello locale sull'intero set di dati locale durante un singolo round 
 learning-rate = 0.01
 batch-size = 32
 seed = 42
