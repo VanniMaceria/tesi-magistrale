@@ -1,4 +1,4 @@
-experiment_id,seed,round,accuracy,loss,cons_ener_nodo,banda_nodo,num_ops_nodo
+experiment_id,seed,round,accuracy,loss,flops_inferenza,banda_nodo_MB,energia_nodo_joule
 1,42,1,0.8542,0.4532,0,0,0
 1,42,2,0.9210,0.2105,0,0,0
 1,42,3,0.9567,0.1089,0,0,0
