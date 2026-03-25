@@ -108,6 +108,7 @@ def train(net, trainloader, epochs, lr, device):
     net.to(device)  # move model to GPU if available
     criterion = torch.nn.CrossEntropyLoss().to(device)
     optimizer = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9)
+    num_examples = len(trainloader.dataset)
     net.train()
     running_loss = 0.0
     for _ in range(epochs):
@@ -120,7 +121,7 @@ def train(net, trainloader, epochs, lr, device):
             optimizer.step()
             running_loss += loss.item()
     avg_trainloss = running_loss / (epochs * len(trainloader))
-    return avg_trainloss
+    return avg_trainloss, num_examples
 
 
 def test(net, testloader, device):
