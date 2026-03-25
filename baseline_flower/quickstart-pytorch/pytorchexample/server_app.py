@@ -13,7 +13,7 @@ app = ServerApp()
 # Variabili globali per il monitoraggio
 latest_metrics = {"energia": 0.0, "banda": 0.0, "flops_inf": 0.0, "acc": 0.0, "loss": 0.0}
 current_round = 0
-CSV_COLUMNS = ["id_esperimento", "seed", "round", "accuracy", "loss", "energia", "banda", "flops_inferenza"]
+CSV_COLUMNS = ["id_esperimento", "seed", "round", "accuracy", "loss", "energia(J)", "banda(MB)", "flops_inferenza", "samples"]
 
 def get_next_experiment_id():
     """Calcola il prossimo ID esperimento leggendo i file esistenti."""
@@ -42,11 +42,11 @@ def aggregate_fit_metrics(replies: list, weight_key: str) -> MetricRecord:
         os.makedirs("results/clients", exist_ok=True)
         os.makedirs("results/server", exist_ok=True)
         
-        sums = {k: 0.0 for k in ["acc", "loss", "energy", "banda", "flops_inf"]}
+        sums = {k: 0.0 for k in ["acc", "loss", "energy", "banda", "flops_inf", "samples"]}
         seed_corrente = replies[0]["metrics"]["seed"]
 
         for reply in replies:
-            m = reply["metrics"]  # Estraggo le metriche inviate da ciascun client
+            m = reply["metrics"] 
             c_id = int(m["client_id"])
             
             # Accumulo per medie server
@@ -55,6 +55,7 @@ def aggregate_fit_metrics(replies: list, weight_key: str) -> MetricRecord:
             sums["energy"] += m["energia"]
             sums["banda"] += m["banda"]
             sums["flops_inf"] += m["flops_inferenza"]
+            sums["samples"] += m["num-examples"]
             
             # Scrittura CSV Client in NOTAZIONE SCIENTIFICA (.4e)
             client_file = f"results/clients/client_{c_id}.csv"
@@ -71,7 +72,8 @@ def aggregate_fit_metrics(replies: list, weight_key: str) -> MetricRecord:
                     f"{m['loss']:.4e}", 
                     f"{m['energia']:.4e}", 
                     f"{m['banda']:.4e}", 
-                    f"{m['flops_inferenza']:.4e}"
+                    f"{m['flops_inferenza']:.4e}",
+                    int(m["num-examples"])
                 ])
 
         # Calcolo Medie aggregate per il Server
@@ -80,6 +82,7 @@ def aggregate_fit_metrics(replies: list, weight_key: str) -> MetricRecord:
         latest_metrics["energia"] = sums["energy"] / count
         latest_metrics["banda"] = sums["banda"] / count
         latest_metrics["flops_inf"] = sums["flops_inf"] / count
+        latest_metrics["samples"] = sums["samples"] / count
 
         # Scrittura CSV Server (Stesse colonne, valori medi) in NOTAZIONE SCIENTIFICA
         server_file = "results/server/server_aggregate.csv"
@@ -96,7 +99,8 @@ def aggregate_fit_metrics(replies: list, weight_key: str) -> MetricRecord:
                 f"{latest_metrics['loss']:.4e}", 
                 f"{latest_metrics['energia']:.4e}", 
                 f"{latest_metrics['banda']:.4e}", 
-                f"{latest_metrics['flops_inf']:.4e}"
+                f"{latest_metrics['flops_inf']:.4e}",
+                int(latest_metrics["samples"])
             ])
 
     return MetricRecord({})
