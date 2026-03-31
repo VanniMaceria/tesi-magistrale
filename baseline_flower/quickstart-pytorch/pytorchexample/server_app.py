@@ -16,18 +16,22 @@ current_round = 0
 CSV_COLUMNS = ["id_esperimento", "seed", "round", "accuracy", "loss", "energia(J)", "banda(MB)", "flops_inferenza", "samples"]
 
 def get_next_experiment_id():
-    """Calcola il prossimo ID esperimento leggendo i file esistenti."""
     server_file = "results/server/server_aggregate.csv"
+    # Se il file non esiste, è il primo esperimento assoluto
     if not os.path.exists(server_file):
         return 1
     try:
         with open(server_file, "r") as f:
-            lines = f.readlines()
-            if len(lines) < 2: return 1
+            lines = [line.strip() for line in f.readlines() if line.strip()]
+            if len(lines) < 2:  # Solo header o file vuoto
+                return 1
+            # Prendi l'ID dall'ultima riga valida
             last_line = lines[-1].split(",")
             return int(last_line[0]) + 1
-    except:
-        return 1
+    except Exception as e:
+        print(f"[ATTENZIONE] Errore lettura ID esperimento: {e}")
+        import time
+        return int(time.time())
 
 # Determina l'ID progressivo all'avvio
 ID_ESPERIMENTO = get_next_experiment_id()
