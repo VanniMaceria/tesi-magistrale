@@ -11,25 +11,28 @@ from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, Normalize, ToTensor
 
 
-class Net(nn.Module):
-    """Model (simple CNN adapted from 'PyTorch: A 60 Minute Blitz')"""
-
+class SmallNet(nn.Module):
+    """Versione compressa del modello per i nodi IoT."""
     def __init__(self):
-        super(Net, self).__init__()
-        # MNIST uses 1 channel rather than 3 (RGB) 
-        self.conv1 = nn.Conv2d(1, 6, 5) 
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(6, 16, 5)
+        super(SmallNet, self).__init__()
+        # Convolutional layers
+        # in_channels resta uguale (1), out_channels dimezzato (6 -> 3), kernel_size resta 5 
+        self.conv1 = nn.Conv2d(1, 3, 5) 
+        self.pool = nn.MaxPool2d(2, 2)  # pooling layer resta uaguale (2X2)
+        # in_channels = 3 -> Deve coincidere con gli out_channels di conv1.
+        # out_channels = 8 -> Dimezzato (era 16). Rappresenta il numero di filtri complessi applicati (kernel).
+        # kernel_size = 5 -> Dimensione del filtro (5x5). Resta uguale per mantenere il campo ricettivo.
+        self.conv2 = nn.Conv2d(3, 8, 5)
         
-        # Per MNIST 28x28 -> Conv1 -> Pool -> Conv2 -> Pool la dimensione finale è 16 * 4 * 4
-        self.fc1 = nn.Linear(16 * 4 * 4, 120) 
-        self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, 10)
+        # Fully connected layers
+        self.fc1 = nn.Linear(8 * 4 * 4, 60) # (8 out_channels di conv2) * (4x4 dimensione spaziale dopo conv+pool) = 128
+        self.fc2 = nn.Linear(60, 40)  # 60 neuroni in ingresso, 40 in uscita
+        self.fc3 = nn.Linear(40, 10)  # 40 neuroni in ingresso, 10 classi in uscita (corrispondenti alle cifre 0-9)    
 
     def forward(self, x):
         x = self.pool(F.relu(self.conv1(x)))
         x = self.pool(F.relu(self.conv2(x)))
-        x = x.view(-1, 16 * 4 * 4) 
+        x = x.view(-1, 8 * 4 * 4) 
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         return self.fc3(x)
@@ -150,7 +153,7 @@ def get_model_iot_metrics():
         return 0, 0
     
     # 1. Inizializza il modello temporaneamente su CPU
-    model = Net()
+    model = SmallNet()
     model_cpu = model.to('cpu')
     
     # 2. Crea un input finto della dimensione di un'immagine MNIST (1 canale, 28x28)
@@ -163,3 +166,28 @@ def get_model_iot_metrics():
     flops = macs * 2 
     
     return int(params), int(flops)
+
+def load_proxy_dataset(num_samples=500, seed=42):
+    """
+    Carica un piccolo set di dati (Proxy) dallo stesso dataset dei client
+    per la distillazione lato server.
+    """
+    from datasets import load_dataset
+    from torchvision.transforms import Compose, Normalize, ToTensor
+    from torch.utils.data import DataLoader
+
+    # Carichiamo un sottoinsieme casuale del test set di MNIST come proxy dataset (500 campioni di default)
+    ds = load_dataset("ylecun/mnist", split="test") 
+    ds = ds.rename_column("image", "img")
+    proxy_ds = ds.shuffle(seed=seed).select(range(num_samples))
+    
+    # Definiamo le trasformazioni (identiche a quelle globali nel file)
+    pytorch_transforms = Compose([ToTensor(), Normalize((0.1307,), (0.3081,))])
+    
+    def apply_proxy_transforms(batch):
+        batch["img"] = [pytorch_transforms(img) for img in batch["img"]]
+        return batch
+    
+    # Applichiamo le trasformazioni e creiamo il DataLoader
+    proxy_ds = proxy_ds.with_transform(apply_proxy_transforms)
+    return DataLoader(proxy_ds, batch_size=32)

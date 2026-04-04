@@ -38,6 +38,7 @@ ray_results/
 session_*/
 *.log
 *.sqlite
+results/
 
 # --- DATASETS ---
 # Non caricare mai i dataset (es. CIFAR-10, MNIST) su GitHub!
