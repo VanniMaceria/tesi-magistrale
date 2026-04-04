@@ -11,22 +11,23 @@ The research follows a two-phase comparative approach:
 
 ### Phase 1: Baseline Characterization
 The development of a standard Federated Learning environment to establish a performance baseline. During this phase, key metrics are collected from uncompressed models, including:
-* **Global Accuracy**.
-* **Bandwidth Consumption**
-* **Computational Overhead**
-* **Theoretical Energy Impact**
+* **Global Accuracy**;
+* **Bandwidth Consumption**;
+* **Computational Overhead**;
+* **Theoretical Energy Impact**.
 
 ### Phase 2: Optimization & Comparative Analysis
 The core of the thesis involves the application of complexity-reduction techniques to the baseline. The study evaluates the trade-off between model performance and resource efficiency using:
-* **Pruning**: Systematic removal of redundant weights to sparsify the model.
-* **Quantization**: Reducing weight precision (e.g., from Float32 to Int8/Float16) to optimize memory and bandwidth.
-* **Knowledge Distillation**: Utilizing "Teacher-Student" architectures to transfer knowledge to ultra-lightweight models.
+* **Pruning**: Systematic removal of redundant weights to sparsify the model;
+* **Quantization**: Reducing weight precision (e.g., from Float32 to Int8/Float16) to optimize memory and bandwidth;
+* **Knowledge Distillation**: Utilizing "Teacher-Student" architectures to transfer knowledge to ultra-lightweight models;
 
 ## 🧪 Experimental Setup
 The project utilizes a simulation-driven approach to perform tests. By varying parameters such as the number of participating clients, data distribution (IID vs. Non-IID), and local training intensity (epochs/rounds), the research seeks to identify the most "efficient" technique for IoT deployments—prioritizing energy and bandwidth savings even at the cost of marginal accuracy loss. [Flower](https://flower.ai/) is the framework that has been choosen to perform this task.
 
 ## 🛠️ Project Structure
-* **baseline_flower**: This directory hosts the **simulated federated environment**. It is designed to orchestrate decentralized training rounds and serve as the primary testbed for performance characterization. By executing various optimization strategies within this environment, we extract critical metrics such as global accuracy, communication overhead, and resource utilization, which are essential for the subsequent comparative analysis.
+* **baseline_flower**: This directory hosts the **simulated federated environment**. It is designed to orchestrate decentralized training rounds and serve as the primary testbed for performance characterization. By executing various optimization strategies within this environment, we extract critical metrics such as global accuracy, communication overhead, and resource utilization, which are essential for the subsequent comparative analysis;
+* **baseline_flower_distillation**: This directory integrates Knowledge Distillation (KD) logic within the federated environment. Unlike the standard approach, this configuration introduces a custom server-side aggregation strategy where client models (Teachers) train a more compact global model (Student) using a proxy dataset. This module aims to evaluate how knowledge transfer can mitigate accuracy degradation resulting from model compression, enabling the deployment of extremely lightweight neural architectures optimized for IoT devices.
 
 ---
 *Note: The results from this simulation phase are intended to validate the feasibility of a subsequent deployment on physical MCU hardware.*
