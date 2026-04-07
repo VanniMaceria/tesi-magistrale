@@ -6,6 +6,12 @@ def calculate_kd_loss(y_student, y_teacher, temperature=3.0):
     """
     Calcola la Knowledge Distillation Loss tra l'output dello Student 
     e la media degli output dei Teacher.
+    La funzione di loss implementa la divergenza di Kullback-Leibler applicata a distribuzioni
+    di probabilità 'ammorbidite' tramite un parametro di temperatura T (T troppo piccolo rende le distribuzioni
+    troppo sicure, al contrario T rende la distribuzione piatta). 
+    Questo permette di catturare la geometria dello spazio delle classi definita dai modelli 
+    Teacher (i client), trasferendo allo Student non solo l'etichetta corretta, ma anche le 
+    correlazioni tra le classi non predette.
     """
     # Si usa il Softmax con Temperatura per "ammorbidire" le probabilità
     # e catturare meglio la conoscenza dei Teacher
