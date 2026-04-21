@@ -78,11 +78,11 @@ def load_data(partition_id: int, num_partitions: int, batch_size: int, seed: int
     # Only initialize `FederatedDataset` once
     global fds
     if fds is None:
-        partitioner = IidPartitioner(num_partitions=num_partitions)
-        #dirichlet_partitioner = DirichletPartitioner(num_partitions=num_partitions, alpha=0.1, partition_by="label")
+        #partitioner = IidPartitioner(num_partitions=num_partitions)
+        dirichlet_partitioner = DirichletPartitioner(num_partitions=num_partitions, alpha=0.1, partition_by="label")
         fds = FederatedDataset(
             dataset="ylecun/mnist",
-            partitioners={"train": partitioner},
+            partitioners={"train": dirichlet_partitioner},
         )
     partition = fds.load_partition(partition_id)
     #MNIST dataset has "image" column, but our model expects "img" column, so we rename it here
