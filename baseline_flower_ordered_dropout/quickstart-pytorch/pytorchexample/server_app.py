@@ -68,7 +68,6 @@ def aggregate_fit_metrics(results: list) -> dict:
             sums["flops_inf"] += m["flops_inferenza"]
             sums["samples"] += m["num-examples"]
             
-            # Scrittura CSV Client (con p_profile!)
             client_file = f"results/clients/client_{c_id}.csv"
             file_exists = os.path.isfile(client_file)
             with open(client_file, mode='a', newline='') as f:
@@ -79,7 +78,7 @@ def aggregate_fit_metrics(results: list) -> dict:
                     ID_ESPERIMENTO, 
                     int(m["seed"]), 
                     current_round, 
-                    f"{p_val:.2f}",  # <--- INSERITO IL p_profile
+                    f"{p_val:.2f}", 
                     f"{m['accuracy']:.4e}", 
                     f"{loss_val:.4e}", 
                     f"{m['energia']:.4e}", 

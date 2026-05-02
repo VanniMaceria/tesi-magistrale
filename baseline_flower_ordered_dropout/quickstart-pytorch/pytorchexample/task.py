@@ -103,11 +103,11 @@ def load_data(partition_id: int, num_partitions: int, batch_size: int, seed: int
     """Load partition ylecun/mnist data for clients."""
     global fds
     if fds is None:
-        partitioner = IidPartitioner(num_partitions=num_partitions)
-        #dirichlet_partitioner = DirichletPartitioner(num_partitions=num_partitions, alpha=0.1, partition_by="label")
+        #partitioner = IidPartitioner(num_partitions=num_partitions)
+        dirichlet_partitioner = DirichletPartitioner(num_partitions=num_partitions, alpha=0.1, partition_by="label")
         fds = FederatedDataset(
             dataset="ylecun/mnist",
-            partitioners={"train": partitioner},
+            partitioners={"train": dirichlet_partitioner},
         )
     partition = fds.load_partition(partition_id)
     partition = partition.rename_column("image", "img")
