@@ -94,7 +94,7 @@ def train(net, trainloader, epochs, lr, device):
     """Train the model on the training set."""
     net.to(device)  
     criterion = torch.nn.CrossEntropyLoss().to(device)
-    optimizer = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9)
+    optimizer = torch.optim.SGD(net.parameters(), lr=lr)  #momentum=0.9 se batch-size è 32
     num_examples = len(trainloader.dataset)
     
     # La rete è già in modalità QAT, quindi i gradienti si calcoleranno sui "pesi latenti" (float32)

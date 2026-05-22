@@ -131,7 +131,7 @@ def train(net, trainloader, epochs, lr, device, p_fixed=1.0):
     """Train the model on the training set with Ordered Dropout profile."""
     net.to(device)
     criterion = torch.nn.CrossEntropyLoss().to(device)
-    optimizer = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9)
+    optimizer = torch.optim.SGD(net.parameters(), lr=lr)   #momentum=0.9 se batch-size è 32
     num_examples = len(trainloader.dataset)
     net.train()
     running_loss = 0.0

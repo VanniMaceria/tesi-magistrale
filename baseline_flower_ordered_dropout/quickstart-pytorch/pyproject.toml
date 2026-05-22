@@ -28,6 +28,6 @@ clientapp = "pytorchexample.client_app:app"
 num-server-rounds = 15
 fraction-evaluate = 0.5
 local-epochs = 1
-learning-rate = 0.01
+learning-rate = 0.001 # per batch-size a 32 il learning-rate è 0.01
 batch-size = 1
 seed = 42
