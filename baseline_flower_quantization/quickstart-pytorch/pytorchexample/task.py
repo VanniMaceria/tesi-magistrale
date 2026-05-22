@@ -49,10 +49,11 @@ class Net(nn.Module):
         x = self.dequant(x) # FINE ZONA INT8 (Ritorno a float)
         return x
 
-
 fds = None  
-
-pytorch_transforms = Compose([ToTensor(), Normalize((0.1307,), (0.3081,))])
+# Per MNIST
+#pytorch_transforms = Compose([ToTensor(), Normalize((0.1307,), (0.3081,))])
+# Per Fashion-MNIST
+pytorch_transforms = Compose([ToTensor(), Normalize((0.2860,), (0.3530,))])
 
 def set_all_seeds(seed):
     import torch
@@ -74,7 +75,7 @@ def load_data(partition_id: int, num_partitions: int, batch_size: int, seed: int
     if fds is None:
         #partitioner = IidPartitioner(num_partitions=num_partitions)
         dirichlet_partitioner = DirichletPartitioner(num_partitions=num_partitions, alpha=0.1, partition_by="label")
-        fds = FederatedDataset(dataset="ylecun/mnist", partitioners={"train": dirichlet_partitioner})
+        fds = FederatedDataset(dataset="zalando-datasets/fashion_mnist", partitioners={"train": dirichlet_partitioner})
     partition = fds.load_partition(partition_id)
     partition = partition.rename_column("image", "img")
     partition_train_test = partition.train_test_split(test_size=0.2, seed=seed)
@@ -84,7 +85,7 @@ def load_data(partition_id: int, num_partitions: int, batch_size: int, seed: int
     return trainloader, testloader
 
 def load_centralized_dataset():
-    test_dataset = load_dataset("ylecun/mnist", split="test")
+    test_dataset = load_dataset("zalando-datasets/fashion_mnist", split="test")
     test_dataset = test_dataset.rename_column("image", "img")
     dataset = test_dataset.with_format("torch").with_transform(apply_transforms)
     return DataLoader(dataset, batch_size=128)

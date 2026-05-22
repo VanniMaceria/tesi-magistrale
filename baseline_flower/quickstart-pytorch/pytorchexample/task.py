@@ -37,7 +37,10 @@ class Net(nn.Module):
 
 fds = None  # Cache FederatedDataset
 
-pytorch_transforms = Compose([ToTensor(), Normalize((0.1307,), (0.3081,))])
+# Per MNIST
+#pytorch_transforms = Compose([ToTensor(), Normalize((0.1307,), (0.3081,))])
+# Per Fashion-MNIST
+pytorch_transforms = Compose([ToTensor(), Normalize((0.2860,), (0.3530,))])
 
 def set_all_seeds(seed):
     """Set all random seeds to make results reproducible."""
@@ -71,14 +74,14 @@ def apply_transforms(batch):
 
 
 def load_data(partition_id: int, num_partitions: int, batch_size: int, seed: int = 42):   # seed va a 42 se non lo specifico da shell
-    """Load partition ylecun/mnist data for clients."""
+    """Load partition zalando-datasets/fashion_mnist data for clients."""
     # Only initialize `FederatedDataset` once
     global fds
     if fds is None:
         partitioner = IidPartitioner(num_partitions=num_partitions)
         #dirichlet_partitioner = DirichletPartitioner(num_partitions=num_partitions, alpha=0.1, partition_by="label")
         fds = FederatedDataset(
-            dataset="ylecun/mnist",
+            dataset="zalando-datasets/fashion_mnist",
             partitioners={"train": partitioner},
         )
     partition = fds.load_partition(partition_id)
@@ -97,7 +100,7 @@ def load_data(partition_id: int, num_partitions: int, batch_size: int, seed: int
 
 def load_centralized_dataset():
     """Load the entire test set as a centralized dataset for evaluation on the server"""
-    test_dataset = load_dataset("ylecun/mnist", split="test")
+    test_dataset = load_dataset("zalando-datasets/fashion_mnist", split="test")
     test_dataset = test_dataset.rename_column("image", "img")
     dataset = test_dataset.with_format("torch").with_transform(apply_transforms)
     return DataLoader(dataset, batch_size=128)
