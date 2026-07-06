@@ -73,9 +73,9 @@ def apply_transforms(batch):
 def load_data(partition_id: int, num_partitions: int, batch_size: int, seed: int = 42): 
     global fds
     if fds is None:
-        partitioner = IidPartitioner(num_partitions=num_partitions)
-        #dirichlet_partitioner = DirichletPartitioner(num_partitions=num_partitions, alpha=0.1, partition_by="label")
-        fds = FederatedDataset(dataset="zalando-datasets/fashion_mnist", partitioners={"train": partitioner})
+        #partitioner = IidPartitioner(num_partitions=num_partitions)
+        dirichlet_partitioner = DirichletPartitioner(num_partitions=num_partitions, alpha=0.1, partition_by="label")
+        fds = FederatedDataset(dataset="zalando-datasets/fashion_mnist", partitioners={"train": dirichlet_partitioner})
     partition = fds.load_partition(partition_id)
     partition = partition.rename_column("image", "img")
     partition_train_test = partition.train_test_split(test_size=0.2, seed=seed)
