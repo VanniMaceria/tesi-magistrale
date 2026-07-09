@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from datasets import load_dataset
 from flwr_datasets import FederatedDataset
-from flwr_datasets.partitioner import IidPartitioner
+from flwr_datasets.partitioner import IidPartitioner, NaturalIdPartitioner
 from flwr_datasets.partitioner import DirichletPartitioner
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, Normalize, ToTensor
@@ -24,7 +24,8 @@ class Net(nn.Module):
         # Per MNIST 28x28 -> Conv1 -> Pool -> Conv2 -> Pool la dimensione finale è 16 * 4 * 4
         self.fc1 = nn.Linear(16 * 4 * 4, 120) 
         self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, 10)
+        #self.fc3 = nn.Linear(84, 10) # 10 classi per MNIST e FASHION-MNIST
+        self.fc3 = nn.Linear(84, 62)  # 62 classi per FEMNIST
 
     def forward(self, x):
         x = self.pool(F.relu(self.conv1(x)))
@@ -40,7 +41,9 @@ fds = None  # Cache FederatedDataset
 # Per MNIST
 #pytorch_transforms = Compose([ToTensor(), Normalize((0.1307,), (0.3081,))])
 # Per Fashion-MNIST
-pytorch_transforms = Compose([ToTensor(), Normalize((0.2860,), (0.3530,))])
+#pytorch_transforms = Compose([ToTensor(), Normalize((0.2860,), (0.3530,))])
+# Per FEMNIST
+pytorch_transforms = Compose([ToTensor(), Normalize((0.5,), (0.5,))])
 
 def set_all_seeds(seed):
     """Set all random seeds to make results reproducible."""
@@ -74,19 +77,21 @@ def apply_transforms(batch):
 
 
 def load_data(partition_id: int, num_partitions: int, batch_size: int, seed: int = 42):   # seed va a 42 se non lo specifico da shell
-    """Load partition zalando-datasets/fashion_mnist data for clients."""
+    """Load partition flwrlabs/femnist data for clients."""
     # Only initialize `FederatedDataset` once
     global fds
     if fds is None:
         #partitioner = IidPartitioner(num_partitions=num_partitions)
-        dirichlet_partitioner = DirichletPartitioner(num_partitions=num_partitions, alpha=0.1, partition_by="label")
+        natural_id_partitioner = NaturalIdPartitioner(partition_by="writer_id")  # per FEMNIST
+        #dirichlet_partitioner = DirichletPartitioner(num_partitions=num_partitions, alpha=0.1, partition_by="label")
         fds = FederatedDataset(
-            dataset="zalando-datasets/fashion_mnist",
-            partitioners={"train": dirichlet_partitioner},
+            dataset="flwrlabs/femnist",
+            partitioners={"train": natural_id_partitioner},
         )
     partition = fds.load_partition(partition_id)
     #MNIST dataset has "image" column, but our model expects "img" column, so we rename it here
-    partition = partition.rename_column("image", "img")
+    #partition = partition.rename_column("image", "img") # per MNIST e FASHION-MNIST
+    partition = partition.rename_columns({"image": "img", "character": "label"})  # per FEMNIST
     # Divide data on each node: 80% train, 20% test
     partition_train_test = partition.train_test_split(test_size=0.2, seed=seed)
     # Construct dataloaders
@@ -98,11 +103,33 @@ def load_data(partition_id: int, num_partitions: int, batch_size: int, seed: int
     return trainloader, testloader
 
 
-def load_centralized_dataset():
-    """Load the entire test set as a centralized dataset for evaluation on the server"""
-    test_dataset = load_dataset("zalando-datasets/fashion_mnist", split="test")
-    test_dataset = test_dataset.rename_column("image", "img")
+"""def load_centralized_dataset():
+    """"""Load the entire test set as a centralized dataset for evaluation on the server""""""
+    test_dataset = load_dataset("flwrlabs/femnist", split="test")
+    test_dataset = test_dataset.rename_column("image", "img") # per MNIST e FASHION-MNIST
     dataset = test_dataset.with_format("torch").with_transform(apply_transforms)
+    return DataLoader(dataset, batch_size=128)
+"""
+
+
+# variante per FEMNIST
+def load_centralized_dataset():
+    """Load a subset of the data as a centralized dataset for evaluation on the server"""
+    # 1. Carica l'unico split esistente ("train")
+    full_dataset = load_dataset("flwrlabs/femnist", split="train")
+    
+    # 2. Suddividilo dinamicamente (es. 80% train, 20% test) usando un seed fisso
+    split_dataset = full_dataset.train_test_split(test_size=0.2, seed=42)
+    
+    # 3. Estrai solo la parte di test per la valutazione del server
+    test_dataset = split_dataset["test"]
+    
+    # 4. Rinomina le colonne come già facevi
+    test_dataset = test_dataset.rename_columns({"image": "img", "character": "label"})
+    
+    # 5. Applica le trasformazioni PyTorch
+    dataset = test_dataset.with_format("torch").with_transform(apply_transforms)
+    
     return DataLoader(dataset, batch_size=128)
 
 
@@ -110,7 +137,8 @@ def train(net, trainloader, epochs, lr, device):
     """Train the model on the training set."""
     net.to(device)  # move model to GPU if available
     criterion = torch.nn.CrossEntropyLoss().to(device)
-    optimizer = torch.optim.SGD(net.parameters(), lr=lr) #momentum=0.9 se batch-size è 32
+    #optimizer = torch.optim.SGD(net.parameters(), lr=lr) #momentum=0.9 se batch-size è 32
+    optimizer = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4) #optimizer per FEMNIST
     num_examples = len(trainloader.dataset)
     net.train()
     running_loss = 0.0
