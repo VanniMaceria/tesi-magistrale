@@ -3,7 +3,7 @@
 import torch
 from flwr.app import ArrayRecord, Context, Message, MetricRecord, RecordDict
 from flwr.clientapp import ClientApp
-from pytorchexample.task import SmallNet, load_data, get_model_iot_metrics
+from pytorchexample.task import TinyNetIoT, load_data, get_model_iot_metrics
 from pytorchexample.task import test as test_fn
 from pytorchexample.task import train as train_fn
 
@@ -23,7 +23,7 @@ def train(msg: Message, context: Context):
     set_all_seeds(current_seed)
 
     # Load the model and initialize it with the received weights
-    model = SmallNet()
+    model = TinyNetIoT()
     model.load_state_dict(msg.content["arrays"].to_torch_state_dict())
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model.to(device)
@@ -110,7 +110,7 @@ def train(msg: Message, context: Context):
 @app.evaluate()
 def evaluate(msg: Message, context: Context):
     """Evaluate the model on local data."""
-    model = SmallNet()
+    model = TinyNetIoT()
     model.load_state_dict(msg.content["arrays"].to_torch_state_dict())
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model.to(device)

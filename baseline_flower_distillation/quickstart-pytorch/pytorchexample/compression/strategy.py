@@ -1,7 +1,7 @@
 import torch
 from flwr.serverapp.strategy import FedAvg
 from flwr.common import parameters_to_ndarrays, ndarrays_to_parameters
-from pytorchexample.task import SmallNet
+from pytorchexample.task import TinyNetIoT
 from pytorchexample.compression.distiller import train_distillation
 
 class DistillationStrategy(FedAvg):
@@ -14,20 +14,20 @@ class DistillationStrategy(FedAvg):
     # Viene chiamato ad ogni round
     def aggregate_fit(self, server_round, results, failures):
         """
-        Invece di fare la media dei pesi (FedAvg), usa i modelli SmallNet dei client 
-        come Teacher per addestrare il nuovo modello globale SmallNet tramite distillazione.
+        Invece di fare la media dei pesi (FedAvg), usa i modelli TinyNetIoT dei client 
+        come Teacher per addestrare il nuovo modello globale TinyNetIoT tramite distillazione.
         """
         if not results:
             return None, {}
 
-        # 1. Ricostruiamo i modelli "Teacher" (SmallNet) dai pesi ricevuti dai client
+        # 1. Ricostruiamo i modelli "Teacher" (TinyNetIoT) dai pesi ricevuti dai client
         teacher_models = []
         for _, fit_res in results:
             # Convertiamo i parametri Flower (byte) in array NumPy
             ndarrays = parameters_to_ndarrays(fit_res.parameters)
             
-            # Creiamo un'istanza di SmallNet
-            t_model = SmallNet().to(self.device)
+            # Creiamo un'istanza di TinyNetIoT
+            t_model = TinyNetIoT().to(self.device)
             
             # Carichiamo i pesi nel modello
             params_dict = zip(t_model.state_dict().keys(), ndarrays)
@@ -37,13 +37,13 @@ class DistillationStrategy(FedAvg):
             t_model.eval() # Fondamentale: i Teacher devono essere in modalità valutazione
             teacher_models.append(t_model)
 
-        # 2. Prepariamo lo "Student" (il modello globale SmallNet che verrà distribuito)
-        # Partiamo da una nuova SmallNet
-        student_model = SmallNet().to(self.device)
+        # 2. Prepariamo lo "Student" (il modello globale TinyNetIoT che verrà distribuito)
+        # Partiamo da una nuova TinyNetIoT
+        student_model = TinyNetIoT().to(self.device)
 
         # 3. Eseguiamo la Knowledge Distillation lato Server
         # Questa funzione userà il proxy_loader per far 'parlare' i modelli
-        print(f"\n[SERVER] Round {server_round}: Avvio Distillazione su {len(teacher_models)} modelli SmallNet...")
+        print(f"\n[SERVER] Round {server_round}: Avvio Distillazione su {len(teacher_models)} modelli TinyNetIoT...")
         
         updated_student = train_distillation(
             student_model=student_model,

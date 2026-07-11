@@ -6,7 +6,7 @@ import csv
 from flwr.app import ArrayRecord, ConfigRecord, Context, MetricRecord
 from flwr.serverapp import Grid, ServerApp
 from flwr.serverapp.strategy import FedAvg
-from pytorchexample.task import SmallNet, load_centralized_dataset, test, set_all_seeds
+from pytorchexample.task import TinyNetIoT, load_centralized_dataset, test, set_all_seeds
 from pytorchexample.compression.strategy import DistillationStrategy
 from pytorchexample.task import load_proxy_dataset
 
@@ -133,7 +133,7 @@ def main(grid: Grid, context: Context) -> None:
     proxy_loader = load_proxy_dataset(num_samples=500, seed=current_seed)
 
     # 2. Inizializziamo il modello globale (Student)
-    global_model = SmallNet()
+    global_model = TinyNetIoT()
     arrays = ArrayRecord(global_model.state_dict())
 
     # 3. Usiamo la DistillationStrategy custom invece di FedAvg
@@ -162,7 +162,7 @@ def global_evaluate(server_round: int, arrays: ArrayRecord) -> MetricRecord:
     """Valutazione centralizzata con report IoT arricchito."""
     global latest_metrics
     
-    model = SmallNet()
+    model = TinyNetIoT()
     model.load_state_dict(arrays.to_torch_state_dict())
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model.to(device)
