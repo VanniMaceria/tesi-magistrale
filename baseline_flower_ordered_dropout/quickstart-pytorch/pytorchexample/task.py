@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from datasets import load_dataset
 from flwr_datasets import FederatedDataset
-from flwr_datasets.partitioner import DirichletPartitioner, IidPartitioner
+from flwr_datasets.partitioner import DirichletPartitioner, IidPartitioner, NaturalIdPartitioner
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, Normalize, ToTensor
 
@@ -23,7 +23,7 @@ class Net(nn.Module):
         # 16*4*4 è la dimensione piatta post-convoluzioni per MNIST
         self.fc1 = nn.Linear(16 * 4 * 4, 120)
         self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, 10)
+        self.fc3 = nn.Linear(84, 62)
 
     def forward(self, x, p=1.0):
         """
@@ -83,7 +83,9 @@ fds = None  # Cache FederatedDataset
 # Per MNIST
 #pytorch_transforms = Compose([ToTensor(), Normalize((0.1307,), (0.3081,))])
 # Per Fashion-MNIST
-pytorch_transforms = Compose([ToTensor(), Normalize((0.2860,), (0.3530,))])
+#pytorch_transforms = Compose([ToTensor(), Normalize((0.2860,), (0.3530,))])
+# Per FEMNIST
+pytorch_transforms = Compose([ToTensor(), Normalize((0.5,), (0.5,))])
 
 def set_all_seeds(seed):
     """Set all random seeds to make results reproducible."""
@@ -103,27 +105,39 @@ def apply_transforms(batch):
     return batch
 
 def load_data(partition_id: int, num_partitions: int, batch_size: int, seed: int = 42):
-    """Load partition zalando-datasets/fashion_mnist data for clients."""
+    """Load partition flwrlabs/femnist data for clients."""
     global fds
     if fds is None:
         #partitioner = IidPartitioner(num_partitions=num_partitions)
-        dirichlet_partitioner = DirichletPartitioner(num_partitions=num_partitions, alpha=0.1, partition_by="label")
+        natural_id_partitioner = NaturalIdPartitioner(partition_by="writer_id")
+        #dirichlet_partitioner = DirichletPartitioner(num_partitions=num_partitions, alpha=0.1, partition_by="label")
         fds = FederatedDataset(
-            dataset="zalando-datasets/fashion_mnist",
-            partitioners={"train": dirichlet_partitioner},
+            dataset="flwrlabs/femnist",
+            partitioners={"train": natural_id_partitioner},
         )
     partition = fds.load_partition(partition_id)
-    partition = partition.rename_column("image", "img")
+    #partition = partition.rename_column("image", "img")  # per MNIST e Fashion-MNIST
+    partition = partition.rename_columns({"image": "img", "character": "label"}) # per FEMNIST
     partition_train_test = partition.train_test_split(test_size=0.2, seed=seed)
     partition_train_test = partition_train_test.with_transform(apply_transforms)
     trainloader = DataLoader(partition_train_test["train"], batch_size=batch_size, shuffle=True)
     testloader = DataLoader(partition_train_test["test"], batch_size=batch_size)
     return trainloader, testloader
 
+"""
 def load_centralized_dataset():
-    """Load the entire test set as a centralized dataset for evaluation on the server"""
-    test_dataset = load_dataset("zalando-datasets/fashion_mnist", split="test")
+    """"""Load the entire test set as a centralized dataset for evaluation on the server""""""
+    test_dataset = load_dataset("flwrlabs/femnist", split="test")
     test_dataset = test_dataset.rename_column("image", "img")
+    dataset = test_dataset.with_format("torch").with_transform(apply_transforms)
+    return DataLoader(dataset, batch_size=128)
+"""
+# Per FEMNIST
+def load_centralized_dataset():
+    full_dataset = load_dataset("flwrlabs/femnist", split="train")
+    split_dataset = full_dataset.train_test_split(test_size=0.2, seed=42)
+    test_dataset = split_dataset["test"]
+    test_dataset = test_dataset.rename_columns({"image": "img", "character": "label"})
     dataset = test_dataset.with_format("torch").with_transform(apply_transforms)
     return DataLoader(dataset, batch_size=128)
 
@@ -131,7 +145,8 @@ def train(net, trainloader, epochs, lr, device, p_fixed=1.0):
     """Train the model on the training set with Ordered Dropout profile."""
     net.to(device)
     criterion = torch.nn.CrossEntropyLoss().to(device)
-    optimizer = torch.optim.SGD(net.parameters(), lr=lr)   #momentum=0.9 se batch-size è 32
+    #optimizer = torch.optim.SGD(net.parameters(), lr=lr)   #momentum=0.9 se batch-size è 32
+    optimizer = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4) # per FEMNIST
     num_examples = len(trainloader.dataset)
     net.train()
     running_loss = 0.0
@@ -182,7 +197,7 @@ def get_model_iot_metrics(p=1.0):
     p_conv2 = (c1_out * 5 * 5 + 1) * c2_out
     p_fc1 = (c2_out * 16 + 1) * f1_out
     p_fc2 = (f1_out + 1) * f2_out
-    p_fc3 = (f2_out + 1) * 10
+    p_fc3 = (f2_out + 1) * 62  # cambia numero classi in base al dataset
     total_params = p_conv1 + p_conv2 + p_fc1 + p_fc2 + p_fc3
 
     # --- FLOPs ---
@@ -199,7 +214,7 @@ def get_model_iot_metrics(p=1.0):
     # FC1: Input 16 (mappa 4x4) * c2_out canali
     macs_fc1 = (c2_out * 16) * f1_out
     macs_fc2 = f1_out * f2_out
-    macs_fc3 = f2_out * 10
+    macs_fc3 = f2_out * 62 # cambia numero classi in base al dataset
 
     total_macs = macs_conv1 + macs_conv2 + macs_fc1 + macs_fc2 + macs_fc3
     total_flops = total_macs * 2
