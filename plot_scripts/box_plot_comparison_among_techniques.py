@@ -4,7 +4,7 @@ import seaborn as sns
 import os
 
 # --- CONFIGURAZIONE ---
-ROOT_PATH = r"C:\Users\Lenovo\Desktop\Magistrale\Tesi\progetto\simulation_results\FASHION_MNIST\non-iid"
+ROOT_PATH = r"C:\Users\Lenovo\Desktop\Magistrale\Tesi\progetto\simulation_results\FEMNIST\non-iid"
 TECNICHE = ["baseline", "distillation", "ordered_dropout", "quantization"]
 # Cartella di output richiesta
 OUTPUT_ROOT = os.path.join(ROOT_PATH, "plots", "box_plots")
