@@ -4,7 +4,7 @@ import seaborn as sns
 import os
 
 # --- CONFIGURAZIONE ---
-ROOT_PATH = r"C:\Users\Lenovo\Desktop\Magistrale\Tesi\progetto\simulation_results\FEMNIST\non-iid"
+ROOT_PATH = r"C:\Users\Lenovo\Desktop\Magistrale\Tesi\progetto\simulation_results\FEMNIST\iid"
 TECNICHE = ["baseline", "distillation", "ordered_dropout", "quantization"]
 # Cartella di output richiesta
 OUTPUT_ROOT = os.path.join(ROOT_PATH, "plots", "box_plots")
@@ -26,7 +26,7 @@ def load_final_data(entity_name):
             df_final = df[df['round'] == last_round].copy()
             df_final['Tecnica'] = t
             data.append(df_final)
-    return pd.concat(data) if data else None
+    return pd.concat(data, ignore_index=True) if data else None
 
 def generate_box_plots(df, entity_name):
     entity_dir = os.path.join(OUTPUT_ROOT, entity_name)
