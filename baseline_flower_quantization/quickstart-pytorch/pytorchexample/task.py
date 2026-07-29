@@ -1,5 +1,6 @@
 """pytorchexample: A Flower / PyTorch app."""
-
+import datasets
+datasets.disable_caching()
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
