@@ -1,7 +1,9 @@
 # tesi-magistrale
-This research project, developed as part of my Master's Thesis in Computer Science (IoT Curriculum), focuses on the challenges of deploying **Federated Learning (FL)** in resource-constrained environments. 
+This research project, developed as part of my Master's Thesis in Computer Science (IoT Curriculum), focuses on the challenges of deploying **Federated Learning (FL)** in resource-constrained environments.
 
 While FL is widely adopted for privacy-preserving distributed learning, its execution on **Microcontroller Units (MCUs)** and low-power IoT devices remains a significant challenge due to hardware limitations in memory, processing power, and energy autonomy.
+
+***FedComp*** is the framework developed to address the gap between algorithmic model compression theory and practical edge resource profiling in Federated Learning.
 
 ## 🔬 Research Goal
 The primary objective of this study is to bridge the gap between high-performance Federated Learning and constrained edge computing. The project aims to identify, implement, and compare various **model compression and optimization techniques** to minimize the footprint of neural networks during the federated training process.
