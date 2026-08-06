@@ -279,7 +279,7 @@ void onMqttMessage(int messageSize) {
   String topic = mqttClient.messageTopic();
   Serial.printf("\n[MQTT] Messaggio ricevuto sul topic: %s (%d byte)\n", topic.c_str(), messageSize);
 
-  StaticJsonDocument<256> doc;
+  StaticJsonDocument<128> doc;
   DeserializationError error = deserializeJson(doc, mqttClient);
 
   if (error) {
@@ -291,16 +291,14 @@ void onMqttMessage(int messageSize) {
   const char* action = doc["action"];
 
   if (action && strcmp(action, "train") == 0) {
-    int rounds = doc["rounds"] | 1;
-    int epochs = doc["epochs"] | LOCAL_EPOCHS;
-    float lr   = doc["lr"]     | LEARNING_RATE;
+    int rounds = doc["rounds"] | 1; // se non sono specificati rounds vale 1
 
-    Serial.printf("\n=== RICEVUTO COMANDO FL: %d Round | %d Epoche | LR: %.4f ===\n", 
-                  rounds, epochs, lr);
+    Serial.printf("\n=== RICEVUTO COMANDO FL: %d Round (Epoche/LR interni al MCU) ===\n", rounds);
 
     for (int r = 1; r <= rounds; r++) {
       Serial.printf("--- Round Locale %d/%d ---\n", r, rounds);
-      run_local_training(epochs, lr);
+      // Sfrutta direttamente le costanti/variabili locali LOCAL_EPOCHS e LEARNING_RATE
+      run_local_training(LOCAL_EPOCHS, LEARNING_RATE);
     }
 
     Serial.println("=== Addestramento completato. Avvio invio pesi... ===");
