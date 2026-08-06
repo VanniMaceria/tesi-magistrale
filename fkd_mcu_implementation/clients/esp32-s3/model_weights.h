@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 
-// Architettura MLP per MNIST / FEMNIST (784 -> 32 -> 10)
+// Architettura MLP per MNIST (784 -> 32 -> 10)
 #define INPUT_SIZE  784
 #define HIDDEN_SIZE 32
 #define OUTPUT_SIZE 10

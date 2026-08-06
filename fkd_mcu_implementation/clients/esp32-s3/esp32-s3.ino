@@ -1,12 +1,33 @@
 #include <Arduino.h>
+#include <WiFi.h>
+#include <ArduinoMqttClient.h>
+#include <ArduinoJson.h>
 #include "mnist_flash_dataset.h" // Dataset MNIST allocato in Flash (PROGMEM)
 #include "model_weights.h"       // Definizione dell'architettura e pesi iniziali
+#include "wifi_credentials.h"
+
+// ============================================================================
+// CONFIGURAZIONE RETE E BROKER MQTT
+// ============================================================================
+const char* MQTT_SERVER   = "10.0.0.100"; // IP Broker MQTT / Server FL
+const int   MQTT_PORT     = 1883;
+
+const char* TOPIC_COMMAND = "fl/global/command";
+const char* TOPIC_WEIGHTS = "fl/client_0/weights";
+
+#define TOTAL_WEIGHTS_FLOATS 25450
+#define WEIGHTS_BYTE_SIZE    (TOTAL_WEIGHTS_FLOATS * sizeof(float))
+
+WiFiClient wifiClient;
+MqttClient mqttClient(wifiClient);
 
 // ============================================================================
 // 1. IPERPARAMETRI DI ADDESTRAMENTO E ARCHITETTURA DELLA RETE
 // ============================================================================
 #define LEARNING_RATE 0.03f  // Tasso di apprendimento per l'aggiornamento SGD
 #define LOCAL_EPOCHS  10     // Epoche locali
+float current_lr = LEARNING_RATE;
+
 // Pesi e Bias allocati in memoria RAM dinamica (modificabili durante il Gradient Descent)
 // Architettura MLP: 784 ingressi (28x28 pixel) -> 32 neuroni nascosti -> 10 classi di output
 float W1[INPUT_SIZE][HIDDEN_SIZE];   // Matrice pesi Layer 1 (784 x 32)
@@ -136,18 +157,18 @@ float train_single_sample(const uint8_t* image_bytes, uint8_t label) {
   // 5. Aggiornamento Pesi W2 e Bias b2 tramite SGD (Batch Size = 1)
   for (int k = 0; k < OUTPUT_SIZE; k++) {
     for (int j = 0; j < HIDDEN_SIZE; j++) {
-      W2[j][k] -= LEARNING_RATE * d_output[k] * hidden_activations[j];
+      W2[j][k] -= current_lr * d_output[k] * hidden_activations[j];
     }
-    b2[k] -= LEARNING_RATE * d_output[k];
+    b2[k] -= current_lr * d_output[k];
   }
 
   // 6. Aggiornamento Pesi W1 e Bias b1 tramite SGD
   for (int j = 0; j < HIDDEN_SIZE; j++) {
     for (int i = 0; i < INPUT_SIZE; i++) {
       float input_val = (float)image_bytes[i] / 255.0f;
-      W1[i][j] -= LEARNING_RATE * d_hidden[j] * input_val;
+      W1[i][j] -= current_lr * d_hidden[j] * input_val;
     }
-    b1[j] -= LEARNING_RATE * d_hidden[j];
+    b1[j] -= current_lr * d_hidden[j];
   }
 
   return loss;
@@ -179,7 +200,143 @@ float evaluate_test_set() {
 }
 
 // ============================================================================
-// 7. SETUP ED ESECUZIONE DEL CICLO DI ADDESTRAMENTO
+// ESECUZIONE DEL CICLO DI ADDESTRAMENTO
+// ============================================================================
+void run_local_training(int epochs, float lr) {
+  current_lr = lr;
+  unsigned long start_time_ms = millis(); // Cronometro per la profilazione dell'addestramento
+
+  // Ciclo principale di addestramento su più epoche locali
+  for (int epoch = 1; epoch <= epochs; epoch++) {
+    float epoch_loss = 0.0f;
+    
+    // Ciclo sui 200 campioni di training disponibili in Flash
+    for (int n = 0; n < NUM_TRAIN_SAMPLES; n++) {
+      float l = train_single_sample(train_images[n], train_labels[n]);
+      epoch_loss += l;
+    }
+    
+    // Log di progresso dell'epoca
+    Serial.printf("[EPOCH %2d/%d] Loss Media Training: %.4f | Current Test Acc: %.2f%%\n", 
+                  epoch, epochs, epoch_loss / NUM_TRAIN_SAMPLES, evaluate_test_set());
+  }
+
+  unsigned long elapsed_time_ms = millis() - start_time_ms;
+  float final_acc = evaluate_test_set();
+
+  Serial.println("-------------------------------------------------");
+  Serial.printf("Tempo Totale Training (%d epoche x %d campioni): %lu ms (%.2f s)\n", 
+                epochs, NUM_TRAIN_SAMPLES, elapsed_time_ms, elapsed_time_ms / 1000.0f);
+  Serial.printf("Tempo Medio per Epoca:      %.2f ms\n", (float)elapsed_time_ms / epochs);
+  Serial.printf("Accuracy FINALE Test Set:   %.2f%%\n", final_acc);
+  Serial.println("-------------------------------------------------");
+}
+
+// ============================================================================
+// TRASMISSIONE BINARIA DEI PESI VIA MQTT
+// ============================================================================
+void send_weights_mqtt() {
+  float* flat_weights = (float*) malloc(WEIGHTS_BYTE_SIZE);
+  if (flat_weights == NULL) {
+    Serial.println("[MQTT Error] Allocazione RAM fallita per l'invio pesi!");
+    return;
+  }
+
+  // Serializzazione dei blocchi della rete
+  memcpy(flat_weights, W1, sizeof(W1));
+  size_t offset = (INPUT_SIZE * HIDDEN_SIZE);
+  
+  memcpy(flat_weights + offset, b1, sizeof(b1));
+  offset += HIDDEN_SIZE;
+  
+  memcpy(flat_weights + offset, W2, sizeof(W2));
+  offset += (HIDDEN_SIZE * OUTPUT_SIZE);
+  
+  memcpy(flat_weights + offset, b2, sizeof(b2));
+
+  const uint8_t* binary_payload = reinterpret_cast<const uint8_t*>(flat_weights);
+
+  Serial.printf("[MQTT] Invio pesi (%d byte) sul topic %s...\n", WEIGHTS_BYTE_SIZE, TOPIC_WEIGHTS);
+  
+  // Invio in streaming con ArduinoMqttClient
+  mqttClient.beginMessage(TOPIC_WEIGHTS, WEIGHTS_BYTE_SIZE, false, 0, false);
+  mqttClient.write(binary_payload, WEIGHTS_BYTE_SIZE);
+  bool success = mqttClient.endMessage();
+
+  if (success) {
+    Serial.println("[MQTT] Pesi inviati correttamente al server!");
+  } else {
+    Serial.println("[MQTT Error] Errore nell'invio del messaggio MQTT.");
+  }
+
+  free(flat_weights);
+}
+
+// ============================================================================
+// GESTIONE MESSAGGI RICEVUTI DA BROKER MQTT
+// ============================================================================
+void onMqttMessage(int messageSize) {
+  String topic = mqttClient.messageTopic();
+  Serial.printf("\n[MQTT] Messaggio ricevuto sul topic: %s (%d byte)\n", topic.c_str(), messageSize);
+
+  StaticJsonDocument<256> doc;
+  DeserializationError error = deserializeJson(doc, mqttClient);
+
+  if (error) {
+    Serial.print("[MQTT Error] Parsing JSON fallito: ");
+    Serial.println(error.f_str());
+    return;
+  }
+
+  const char* action = doc["action"];
+
+  if (action && strcmp(action, "train") == 0) {
+    int rounds = doc["rounds"] | 1;
+    int epochs = doc["epochs"] | LOCAL_EPOCHS;
+    float lr   = doc["lr"]     | LEARNING_RATE;
+
+    Serial.printf("\n=== RICEVUTO COMANDO FL: %d Round | %d Epoche | LR: %.4f ===\n", 
+                  rounds, epochs, lr);
+
+    for (int r = 1; r <= rounds; r++) {
+      Serial.printf("--- Round Locale %d/%d ---\n", r, rounds);
+      run_local_training(epochs, lr);
+    }
+
+    Serial.println("=== Addestramento completato. Avvio invio pesi... ===");
+    send_weights_mqtt();
+  }
+}
+
+void setup_wifi() {
+  delay(10);
+  Serial.printf("[WiFi] Connessione a %s ", WIFI_SSID);
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.printf("\n[WiFi] Connesso! IP: %s\n", WiFi.localIP().toString().c_str());
+}
+
+void reconnect_mqtt() {
+  while (!mqttClient.connected()) {
+    Serial.print("[MQTT] Connessione al broker MQTT...");
+    mqttClient.setId("ESP32S3_FL_Client_0");
+    
+    if (mqttClient.connect(MQTT_SERVER, MQTT_PORT)) {
+      Serial.println(" Connesso!");
+      mqttClient.subscribe(TOPIC_COMMAND);
+      Serial.printf("[MQTT] Sottoscritto al topic: %s\n", TOPIC_COMMAND);
+    } else {
+      Serial.printf(" Fallito (errore=%d). Riprovo tra 5 secondi...\n", mqttClient.connectError());
+      delay(5000);
+    }
+  }
+}
+
+// ============================================================================
+// 7. SETUP E LOOP PRINCIPALE
 // ============================================================================
 void setup() {
   Serial.begin(115200);
@@ -201,38 +358,15 @@ void setup() {
   Serial.printf("[PRE-TRAINING] Accuracy Test Set (%d campioni): %.2f%%\n", NUM_TEST_SAMPLES, initial_acc);
   Serial.println("-------------------------------------------------");
 
-  unsigned long start_time_ms = millis(); // Cronometro per la profilazione dell'addestramento
-
-  // Ciclo principale di addestramento su più epoche locali
-  for (int epoch = 1; epoch <= LOCAL_EPOCHS; epoch++) {
-    float epoch_loss = 0.0f;
-    
-    // Ciclo sui 200 campioni di training disponibili in Flash
-    for (int n = 0; n < NUM_TRAIN_SAMPLES; n++) {
-      float l = train_single_sample(train_images[n], train_labels[n]);
-      epoch_loss += l;
-    }
-    
-    // Log di progresso dell'epoca
-    Serial.printf("[EPOCH %2d/%d] Loss Media Training: %.4f | Current Test Acc: %.2f%%\n", 
-                  epoch, LOCAL_EPOCHS, epoch_loss / NUM_TRAIN_SAMPLES, evaluate_test_set());
-  }
-
-  unsigned long elapsed_time_ms = millis() - start_time_ms;
-
-  // Valutazione finale post-training sul Test Set
-  float final_acc = evaluate_test_set();
-
-  Serial.println("-------------------------------------------------");
-  Serial.printf("[POST-TRAINING STATS]\n");
-  Serial.printf("Tempo Totale Training (%d epoche x %d campioni): %lu ms (%.2f s)\n", 
-                LOCAL_EPOCHS, NUM_TRAIN_SAMPLES, elapsed_time_ms, elapsed_time_ms / 1000.0f);
-  Serial.printf("Tempo Medio per Epoca:      %.2f ms\n", (float)elapsed_time_ms / LOCAL_EPOCHS);
-  Serial.printf("Accuracy INIZIALE Test Set: %.2f%%\n", initial_acc);
-  Serial.printf("Accuracy FINALE Test Set:   %.2f%%\n", final_acc);
-  Serial.println("=================================================");
+  // Connessione WiFi e Broker MQTT
+  setup_wifi();
+  mqttClient.onMessage(onMqttMessage);
+  reconnect_mqtt();
 }
 
 void loop() {
-  delay(5000); // Mantiene in esecuzione lo sketch senza sovraccaricare la CPU
+  if (!mqttClient.connected()) {
+    reconnect_mqtt();
+  }
+  mqttClient.poll();
 }

@@ -61,3 +61,6 @@ datasets/
 # --- SISTEMA OPERATIVO ---
 .DS_Store
 Thumbs.db
+
+#file miei da non caricare
+wifi_credentials.h
