@@ -9,11 +9,12 @@
 // ============================================================================
 // CONFIGURAZIONE RETE E BROKER MQTT
 // ============================================================================
-const char* MQTT_SERVER   = "10.0.0.100"; // IP Broker MQTT / Server FL
+const char* MQTT_SERVER   = "10.0.0.101"; // IP Broker MQTT / Server FL
 const int   MQTT_PORT     = 1883;
 
 const char* TOPIC_COMMAND = "fl/global/command";
 const char* TOPIC_WEIGHTS = "fl/client_0/weights";
+const char* TOPIC_GLOBAL_WEIGHTS = "fl/client_0/global_weights";
 
 #define TOTAL_WEIGHTS_FLOATS 25450
 #define WEIGHTS_BYTE_SIZE    (TOTAL_WEIGHTS_FLOATS * sizeof(float))
@@ -273,10 +274,62 @@ void send_weights_mqtt() {
 }
 
 // ============================================================================
+// RICEZIONE E SCRITTURA DEI PESI GLOBALI DALLO STREAM BINARIO MQTT
+// ============================================================================
+void receive_global_weights(int messageSize) {
+  if (messageSize != WEIGHTS_BYTE_SIZE) {
+    Serial.printf("[MQTT Error] Dimensione pesi globali errata! Attesi %d byte, ricevuti %d\n", WEIGHTS_BYTE_SIZE, messageSize);
+    // Svuota il buffer per evitare blocchi
+    while (mqttClient.available()) { mqttClient.read(); }
+    return;
+  }
+
+  float* flat_weights = (float*) malloc(WEIGHTS_BYTE_SIZE);
+  if (flat_weights == NULL) {
+    Serial.println("[MQTT Error] Allocazione RAM fallita per la ricezione pesi globali!");
+    return;
+  }
+
+  // Lettura dello stream binario MQTT direttamente nel buffer temporaneo
+  int bytesRead = mqttClient.read((uint8_t*)flat_weights, WEIGHTS_BYTE_SIZE);
+  if (bytesRead != WEIGHTS_BYTE_SIZE) {
+    Serial.println("[MQTT Error] Lettura incompleta dello stream dei pesi globali!");
+    free(flat_weights);
+    return;
+  }
+
+  // De-serializzazione e salvataggio nelle matrici in RAM (W1, b1, W2, b2)
+  size_t offset = 0;
+  
+  memcpy(W1, flat_weights + offset, sizeof(W1));
+  offset += (INPUT_SIZE * HIDDEN_SIZE);
+  
+  memcpy(b1, flat_weights + offset, sizeof(b1));
+  offset += HIDDEN_SIZE;
+  
+  memcpy(W2, flat_weights + offset, sizeof(W2));
+  offset += (HIDDEN_SIZE * OUTPUT_SIZE);
+  
+  memcpy(b2, flat_weights + offset, sizeof(b2));
+
+  free(flat_weights);
+  Serial.println("[MQTT] Modello globale ricevuto e applicato con successo in RAM!");
+}
+
+// ============================================================================
 // GESTIONE MESSAGGI RICEVUTI DA BROKER MQTT
 // ============================================================================
 void onMqttMessage(int messageSize) {
   String topic = mqttClient.messageTopic();
+
+  // Controllo se il messaggio in arrivo è il nuovo modello globale in formato binario
+  if (topic == TOPIC_GLOBAL_WEIGHTS) {
+    Serial.printf("\n[MQTT] Ricevuto modello globale dal server sul topic: %s (%d byte)\n", topic.c_str(), messageSize);
+    receive_global_weights(messageSize);
+    return;
+  }
+
+  // Altrimenti gestiamo i messaggi in formato JSON (es. comandi di training)
   Serial.printf("\n[MQTT] Messaggio ricevuto sul topic: %s (%d byte)\n", topic.c_str(), messageSize);
 
   StaticJsonDocument<128> doc;
@@ -291,18 +344,14 @@ void onMqttMessage(int messageSize) {
   const char* action = doc["action"];
 
   if (action && strcmp(action, "train") == 0) {
-    int rounds = doc["rounds"] | 1; // se non sono specificati rounds vale 1
-
-    Serial.printf("\n=== RICEVUTO COMANDO FL: %d Round (Epoche/LR interni al MCU) ===\n", rounds);
-
-    for (int r = 1; r <= rounds; r++) {
-      Serial.printf("--- Round Locale %d/%d ---\n", r, rounds);
-      // Sfrutta direttamente le costanti/variabili locali LOCAL_EPOCHS e LEARNING_RATE
-      run_local_training(LOCAL_EPOCHS, LEARNING_RATE);
-    }
+    Serial.println("\n=== RICEVUTO COMANDO FL: Avvio Round Locale ===");
+    
+    // Esegue il training locale per le epoche configurate
+    run_local_training(LOCAL_EPOCHS, LEARNING_RATE);
 
     Serial.println("=== Addestramento completato. Avvio invio pesi... ===");
     send_weights_mqtt();
+    // Dopo l'invio, l'ESP32 si ferma e attende passivamente il modello globale dal server
   }
 }
 
@@ -326,6 +375,9 @@ void reconnect_mqtt() {
       Serial.println(" Connesso!");
       mqttClient.subscribe(TOPIC_COMMAND);
       Serial.printf("[MQTT] Sottoscritto al topic: %s\n", TOPIC_COMMAND);
+      
+      mqttClient.subscribe(TOPIC_GLOBAL_WEIGHTS);
+      Serial.printf("[MQTT] Sottoscritto al topic: %s\n", TOPIC_GLOBAL_WEIGHTS);
     } else {
       Serial.printf(" Fallito (errore=%d). Riprovo tra 5 secondi...\n", mqttClient.connectError());
       delay(5000);
