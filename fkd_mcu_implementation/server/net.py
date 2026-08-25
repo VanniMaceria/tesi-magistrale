@@ -10,7 +10,6 @@ HIDDEN_SIZE = 32
 OUTPUT_SIZE = 10
 WEIGHTS_BYTE_SIZE = (INPUT_SIZE * HIDDEN_SIZE + HIDDEN_SIZE + HIDDEN_SIZE * OUTPUT_SIZE + OUTPUT_SIZE) * 4
 
-
 class ServerMLP(nn.Module):
     def __init__(self):
         super(ServerMLP, self).__init__()
@@ -30,16 +29,21 @@ def deserialize_weights_to_model(binary_payload, model):
     flat_weights = np.frombuffer(binary_payload, dtype=np.float32)
     
     idx = 0
+    
+    # Layer 1: In C++ è W1[784][32]. Ricostruiamo la matrice 784x32 e poi facciamo la trasposta per PyTorch (32, 784)
     w1_size = INPUT_SIZE * HIDDEN_SIZE
-    W1 = flat_weights[idx : idx + w1_size].reshape((HIDDEN_SIZE, INPUT_SIZE))
+    W1_cpp = flat_weights[idx : idx + w1_size].reshape((INPUT_SIZE, HIDDEN_SIZE))
+    W1 = W1_cpp.T
     idx += w1_size
     
     b1_size = HIDDEN_SIZE
     b1 = flat_weights[idx : idx + b1_size]
     idx += b1_size
     
+    # Layer 2: In C++ è W2[32][10]. Ricostruiamo la matrice 32x10 e poi facciamo la trasposta per PyTorch (10, 32)
     w2_size = HIDDEN_SIZE * OUTPUT_SIZE
-    W2 = flat_weights[idx : idx + w2_size].reshape((OUTPUT_SIZE, HIDDEN_SIZE))
+    W2_cpp = flat_weights[idx : idx + w2_size].reshape((HIDDEN_SIZE, OUTPUT_SIZE))
+    W2 = W2_cpp.T
     idx += w2_size
     
     b2_size = OUTPUT_SIZE
@@ -54,9 +58,13 @@ def deserialize_weights_to_model(binary_payload, model):
 
 def serialize_model_to_binary(model):
     state = model.state_dict()
-    W1 = state['fc1.weight'].cpu().numpy().flatten()
+    
+    # PyTorch usa la forma (32, 784). Dobbiamo trasporla in (784, 32) prima di appiattirla per C++
+    W1 = state['fc1.weight'].cpu().numpy().T.flatten()
     b1 = state['fc1.bias'].cpu().numpy().flatten()
-    W2 = state['fc2.weight'].cpu().numpy().flatten()
+    
+    # PyTorch usa la forma (10, 32). Dobbiamo trasporla in (32, 10) prima di appiattirla per C++
+    W2 = state['fc2.weight'].cpu().numpy().T.flatten()
     b2 = state['fc2.bias'].cpu().numpy().flatten()
     
     flat_weights = np.concatenate([W1, b1, W2, b2]).astype(np.float32)

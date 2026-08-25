@@ -9,7 +9,7 @@
 // ============================================================================
 // CONFIGURAZIONE RETE E BROKER MQTT
 // ============================================================================
-const char* MQTT_SERVER   = "10.0.0.100"; // IP Broker MQTT / Server FL
+const char* MQTT_SERVER   = "10.0.0.102"; // IP Broker MQTT / Server FL
 const int   MQTT_PORT     = 1883;
 
 const char* CLIENT_ID     = "client_1"; 
@@ -213,11 +213,13 @@ void run_local_training(int epochs, float lr) {
   for (int epoch = 1; epoch <= epochs; epoch++) {
     float epoch_loss = 0.0f;
     
-    // Ciclo sui 200 campioni di training disponibili in Flash
+    // Ciclo sui campioni di training disponibili in Flash
     for (int n = 0; n < NUM_TRAIN_SAMPLES; n++) {
       float l = train_single_sample(train_images[n], train_labels[n]);
       epoch_loss += l;
     }
+
+    mqttClient.poll();
     
     // Log di progresso dell'epoca
     Serial.printf("[EPOCH %2d/%d] Loss Media Training: %.4f | Current Test Acc: %.2f%%\n", 

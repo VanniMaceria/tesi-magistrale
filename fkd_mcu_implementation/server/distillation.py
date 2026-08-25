@@ -1,52 +1,50 @@
 import torch
 import torch.nn as nn
-import torch.optim as optim
-from net import INPUT_SIZE, evaluate_model
+import torch.nn.functional as F
+from net import INPUT_SIZE
 
 class KnowledgeDistillationManager:
-    def __init__(self, temperature=3.0, alpha=0.5, epochs=3, lr=0.001):
+    def __init__(self, temperature=3.0, epochs=3, lr=0.01):
         self.temperature = temperature
-        self.alpha = alpha
         self.epochs = epochs
         self.lr = lr
+
+    def calculate_kd_loss(self, y_student, y_teacher):
+        soft_teacher = F.softmax(y_teacher / self.temperature, dim=1)
+        soft_student = F.log_softmax(y_student / self.temperature, dim=1)
+        loss = nn.KLDivLoss(reduction='batchmean')(soft_student, soft_teacher) * (self.temperature ** 2)
+        return loss
 
     def perform_knowledge_distillation_multi(self, client_models_dict, server_model, proxy_loader):
         print(f"\n[Server] Avvio Knowledge Distillation Multi-Teacher ({len(client_models_dict)} client collegati) -> Student: Server...")
         
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         server_model.to(device)
-        for client_id, model in client_models_dict.items():
+        server_model.train()
+        
+        teacher_models = []
+        for model in client_models_dict.values():
             model.to(device)
-            model.eval()  # I modelli dei client fanno da Teacher (bloccati)
+            model.eval()
+            teacher_models.append(model)
             
-        server_model.train()  # Il server fa da Student
+        optimizer = torch.optim.Adam(server_model.parameters(), lr=self.lr)
         
-        optimizer = optim.Adam(server_model.parameters(), lr=self.lr)
-        
-        for epoch in range(self.epochs): 
+        for epoch in range(self.epochs):
             running_loss = 0.0
-            for inputs, labels in proxy_loader:
-                inputs, labels = inputs.to(device), labels.to(device)
-                inputs = inputs.view(-1, INPUT_SIZE)
+            for batch in proxy_loader:
+                images = batch[0] if isinstance(batch, (list, tuple)) else batch["img"]
+                images = images.to(device).view(-1, INPUT_SIZE)
                 
                 optimizer.zero_grad()
                 
-                # Logit dello Student (Server)
-                student_logits = server_model(inputs)
+                outputs_student = server_model(images)
                 
-                # Calcolo dei logit medi da tutti i teacher (clienti attivi)
                 with torch.no_grad():
-                    teacher_logits_list = [m(inputs) for m in client_models_dict.values()]
-                    mean_teacher_logits = torch.stack(teacher_logits_list).mean(dim=0)
-                    
-                hard_loss = nn.CrossEntropyLoss()(student_logits, labels)
+                    all_teacher_logits = [t(images) for t in teacher_models]
+                    avg_teacher_logits = torch.stack(all_teacher_logits).mean(dim=0)
                 
-                soft_student = nn.functional.log_softmax(student_logits / self.temperature, dim=1)
-                soft_teacher = nn.functional.softmax(mean_teacher_logits / self.temperature, dim=1)
-                soft_loss = nn.KLDivLoss(reduction='batchmean')(soft_student, soft_teacher) * (self.temperature ** 2)
-                
-                loss = self.alpha * hard_loss + (1 - self.alpha) * soft_loss
-                
+                loss = self.calculate_kd_loss(outputs_student, avg_teacher_logits)
                 loss.backward()
                 optimizer.step()
                 running_loss += loss.item()
@@ -54,9 +52,4 @@ class KnowledgeDistillationManager:
             print(f"[Distillation] Epoca {epoch+1}/{self.epochs} - Loss Media Server: {running_loss/len(proxy_loader):.4f}")
             
         print("[Server] Distillazione Multi-Teacher completata!")
-        
-        # Calcolo accuracy finale del modello globale (server) sul proxy dataset
-        global_accuracy = evaluate_model(server_model, proxy_loader)
-        print(f"\n >>> [ACCURACY MODELLO GLOBALE SERVER] -> {global_accuracy:.2f}% <<<\n")
-        
         return server_model

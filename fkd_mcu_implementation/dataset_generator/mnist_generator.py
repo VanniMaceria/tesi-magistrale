@@ -5,12 +5,12 @@ import numpy as np
 # ==========================================
 # CONFIGURAZIONE CLIENT & DATASET
 # ==========================================
-TOTAL_SAMPLES = 250   # Numero totale di campioni da assegnare a questo client
+TOTAL_SAMPLES = 1200   # Numero totale di campioni da assegnare a questo client
 TRAIN_RATIO = 0.8     # 80% Training, 20% Testing
-CLIENT_ID = 0         # ID del client (cambialo per estrarre porzioni diverse per client diversi)
+CLIENT_ID = 1         # ID del client (cambialo per estrarre porzioni diverse per client diversi)
 
-NUM_TRAIN = int(TOTAL_SAMPLES * TRAIN_RATIO)  # 200 campioni
-NUM_TEST = TOTAL_SAMPLES - NUM_TRAIN          # 50 campioni
+NUM_TRAIN = int(TOTAL_SAMPLES * TRAIN_RATIO)  
+NUM_TEST = TOTAL_SAMPLES - NUM_TRAIN         
 
 print(f"Scaricamento MNIST in corso...")
 print(f"Assegnazione a Client {CLIENT_ID}: {NUM_TRAIN} campioni per Training (80%) e {NUM_TEST} per Test (20%)...")

@@ -2,30 +2,36 @@ import time
 import paho.mqtt.client as mqtt
 from torch.utils.data import DataLoader, Subset
 from torchvision import datasets, transforms
-from net import ServerMLP, deserialize_weights_to_model, serialize_model_to_binary, WEIGHTS_BYTE_SIZE
+from net import ServerMLP, deserialize_weights_to_model, serialize_model_to_binary, WEIGHTS_BYTE_SIZE, evaluate_model
 from distillation import KnowledgeDistillationManager
 
 # ============================================================================
 # CONFIGURAZIONE RETE E MQTT (Multi-Client)
 # ============================================================================
-MQTT_BROKER = "10.0.0.104"
+MQTT_BROKER = "10.0.0.102"
 MQTT_PORT = 1883
 TOPIC_COMMAND = "fl/global/command"
 TOPIC_GLOBAL_WEIGHTS = "fl/global/global_weights" # Topic unico di broadcast in discesa (con Retain)
 
 # Lista dei client attivi partecipanti al Federated Learning
-CLIENT_IDS = ["client_0",]
+CLIENT_IDS = ["client_0", "client_1"]
 
 # Dizionario per raccogliere i pesi binari dei vari client in modo sincronizzato
 received_client_weights = {}
 
 # ============================================================================
-# CALLBACK MQTT (Gestione dinamica dei topic in salita)
+# CALLBACK MQTT
 # ============================================================================
+def on_connect(client, userdata, flags, reason_code, properties):
+    print(f"[Server] Connesso al broker MQTT con codice: {reason_code}")
+    for cid in CLIENT_IDS:
+        topic_w = f"fl/{cid}/weights"
+        client.subscribe(topic_w)
+        print(f"[Server] Richiesta di sottoscrizione inviata al broker per: {topic_w}")
+
 def on_message(client, userdata, msg):
     global received_client_weights
     
-    # Intercetta i messaggi dai topic del tipo: fl/<client_id>/weights
     if "/weights" in msg.topic and "global" not in msg.topic:
         parts = msg.topic.split("/")
         if len(parts) == 3 and parts[0] == "fl" and parts[2] == "weights":
@@ -41,29 +47,24 @@ def main():
     global received_client_weights
     
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="FL_Server_Coordinator")
-    client.on_message = on_message # Callback per la ricezione dei messaggi dai client
+    client.on_connect = on_connect
+    client.on_message = on_message
     
     print(f"[Server] Connessione al broker MQTT {MQTT_BROKER}:{MQTT_PORT}...")
     client.connect(MQTT_BROKER, MQTT_PORT, 60)
-    
-    # Sottoscrizione dinamica ai topic di tutti i client definiti in CLIENT_IDS
-    for cid in CLIENT_IDS:
-        topic_w = f"fl/{cid}/weights"
-        client.subscribe(topic_w)
-        print(f"[Server] Sottoscritto al topic: {topic_w}")
-        
     client.loop_start()
 
-    print("[Server] Caricamento del Proxy Dataset (500 campioni da MNIST)...")
-    transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
+    print("[Server] Caricamento del Proxy Dataset (2500 campioni da MNIST)...")
+    transform = transforms.Compose([transforms.ToTensor()])
     mnist_test = datasets.MNIST(root='./data', train=False, download=True, transform=transform)
     
-    proxy_indices = list(range(500))
+    proxy_indices = list(range(2500))
     proxy_subset = Subset(mnist_test, proxy_indices)
     proxy_loader = DataLoader(proxy_subset, batch_size=32, shuffle=True)
+    test_loader = DataLoader(mnist_test, batch_size=64, shuffle=False)
 
     server_model = ServerMLP() 
-    kd_manager = KnowledgeDistillationManager(temperature=3.0, alpha=0.5, epochs=3)
+    kd_manager = KnowledgeDistillationManager(temperature=3.0, epochs=3, lr=0.01)
 
     try:
         while True:
@@ -75,22 +76,18 @@ def main():
                 print(f"=== INIZIO ROUND FEDERATED GLOBALE {r}/{total_rounds} ===")
                 print(f"==================================================")
                 
-                # Svuota il dizionario dei pesi prima di ogni round
                 received_client_weights = {}
                 
-                # 1. Pubblica il comando di training in broadcast a tutti i client
                 print(f"[MQTT] Pubblicazione comando di training sul topic '{TOPIC_COMMAND}'...")
                 client.publish(TOPIC_COMMAND, '{"action":"train"}')
                 
                 print(f"[Server] In attesa dei pesi da tutti i client ({len(CLIENT_IDS)} attesi: {CLIENT_IDS})...")
                 
-                # Barriera di sincronizzazione: attende finché non arrivano i pesi da TUTTI i client
                 while len(received_client_weights) < len(CLIENT_IDS):
                     time.sleep(0.5)
                     
                 print("[Server] Tutti i client hanno risposto. Ricostruzione dei modelli locali...")
                 
-                # 2. Ricostruisci i modelli di tutti i client ricevuti
                 client_models_dict = {}
                 for client_id in CLIENT_IDS:
                     client_model_recreated = ServerMLP()
@@ -98,12 +95,14 @@ def main():
                     client_models_dict[client_id] = client_model_recreated
                 print("[Server] Modelli dei client ricreati correttamente in memoria.")
                 
-                # 3. Knowledge Distillation Multi-Teacher & Stampa Accuracy Globale
                 updated_server_model = kd_manager.perform_knowledge_distillation_multi(
                     client_models_dict, server_model, proxy_loader
                 )
                 
-                # 4. Serializza e ridistribuisci la rete globale aggiornata in broadcast (con retain=True)
+                # Valutazione globale dell'accuracy sul test set
+                global_accuracy = evaluate_model(updated_server_model, test_loader)
+                print(f"\n >>> [ACCURACY MODELLO GLOBALE SERVER] -> {global_accuracy:.2f}% <<<\n")
+                
                 new_binary_weights = serialize_model_to_binary(updated_server_model)
                 print(f"[MQTT] Distribuzione nuova rete globale in broadcast ({len(new_binary_weights)} byte) sul topic {TOPIC_GLOBAL_WEIGHTS}...")
                 client.publish(TOPIC_GLOBAL_WEIGHTS, new_binary_weights, retain=True)
@@ -118,8 +117,10 @@ def main():
 
     except KeyboardInterrupt:
         print("\n[Server] Chiusura in corso...")
+    finally:
         client.loop_stop()
         client.disconnect()
+        print("[Server] Disconnessione completata.")
 
 if __name__ == "__main__":
     main()
