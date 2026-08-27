@@ -5,6 +5,7 @@
 #include "mnist_flash_dataset.h" // Dataset MNIST allocato in Flash (PROGMEM)
 #include "model_weights.h"       // Definizione dell'architettura e pesi iniziali
 #include "wifi_credentials.h"
+#include "iot_consumption_const.h"
 
 // ============================================================================
 // CONFIGURAZIONE RETE E BROKER MQTT
@@ -389,6 +390,31 @@ void reconnect_mqtt() {
   }
 }
 
+// A causa della rete che non evolve durante i round questi valori restano costanti a meno che non si modificano i campioni di train ed epoche
+void report_round_metrics(int train_samples, int epochs) {
+    // 1. Calcolo FLOPs complessivi del round
+    unsigned long long total_flops = FLOPS_PER_SAMPLE * (unsigned long long)train_samples * (unsigned long long)epochs;
+    double mflops = (double)total_flops / 1e6; // per leggibilità
+
+    // 2. Calcolo Banda di Rete (MB) - RX Modello Globale + TX Pesi Locali
+    size_t rx_bytes = WEIGHTS_BYTE_SIZE; 
+    size_t tx_bytes = WEIGHTS_BYTE_SIZE; 
+    size_t total_bytes = rx_bytes + tx_bytes;
+    double total_mb = (double)total_bytes / (1024.0 * 1024.0);
+
+    // 3. Calcolo Energia secondo il modello analitico unificato (Joule)
+    double energy_comp_j = (double)total_flops * JOULE_PER_FLOP;
+    double energy_comm_j = total_mb * JOULE_PER_MB;
+    double total_energy_j = energy_comp_j + energy_comm_j;
+
+    Serial.println("\n========== METRICHE IOT ROUND ==========");
+    Serial.printf("Campioni Addestrati:     %d | Epoche: %d\n", train_samples, epochs);
+    Serial.printf("Computazione Totale:      %.2f MFLOPs (%.2f GFLOPs)\n", mflops, mflops / 1000.0);
+    Serial.printf("Banda Totale Scambiata:   %.4f MB (%zu byte)\n", total_mb, total_bytes);
+    Serial.printf("Energia Totale Consumata: %.6f J (%.3f mJ)\n", total_energy_j, total_energy_j * 1e3);
+    Serial.println("===========================================================\n");
+}
+
 // ============================================================================
 // 7. SETUP E LOOP PRINCIPALE
 // ============================================================================
@@ -413,6 +439,8 @@ void setup() {
   float initial_acc = evaluate_test_set();
   Serial.printf("[PRE-TRAINING] Accuracy Test Set (%d campioni): %.2f%%\n", NUM_TEST_SAMPLES, initial_acc);
   Serial.println("-------------------------------------------------");
+
+  report_round_metrics(NUM_TRAIN_SAMPLES, LOCAL_EPOCHS);
 
   setup_wifi();
   mqttClient.onMessage(onMqttMessage);
