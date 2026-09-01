@@ -4,13 +4,36 @@ import seaborn as sns
 import os
 
 # --- CONFIGURAZIONE ---
-ROOT_PATH = r"C:\Users\Lenovo\Desktop\Magistrale\Tesi\progetto\simulation_results\FEMNIST\iid"
+ROOT_PATH = r"C:\Users\Lenovo\Desktop\Magistrale\Tesi\progetto\simulation_results\FEMNIST\non-iid"
 TECNICHE = ["baseline", "distillation", "ordered_dropout", "quantization"]
-# Cartella di output richiesta
 OUTPUT_ROOT = os.path.join(ROOT_PATH, "plots", "box_plots")
 
+# Mappatura nomi tecniche e metriche in inglese
+TECHNIQUE_LABELS = {
+    "baseline": "Baseline",
+    "distillation": "FKD",
+    "ordered_dropout": "OD",
+    "quantization": "QAT"
+}
+
+METRIC_LABELS = {
+    'accuracy': 'Accuracy',
+    'loss': 'Loss',
+    'energia(J)': 'Energy (J)',
+    'banda(MB)': 'Bandwidth (MB)',
+    'flops_inferenza': 'Inference FLOPs'
+}
+
+# Configurazione stile e font maggiorati
 sns.set_theme(style="whitegrid")
-plt.rcParams.update({'font.size': 12, 'figure.dpi': 300})
+plt.rcParams.update({
+    'font.size': 18,
+    'axes.labelsize': 16,
+    'xtick.labelsize': 16,
+    'ytick.labelsize': 16,
+    'figure.dpi': 300,
+    'axes.labelcolor': 'black'
+})
 
 def load_final_data(entity_name):
     data = []
@@ -21,10 +44,9 @@ def load_final_data(entity_name):
         
         if os.path.exists(path):
             df = pd.read_csv(path)
-            # Analisi sul round finale per il confronto di efficacia a regime
             last_round = df['round'].max()
             df_final = df[df['round'] == last_round].copy()
-            df_final['Tecnica'] = t
+            df_final['Tecnica'] = TECHNIQUE_LABELS.get(t, t)
             data.append(df_final)
     return pd.concat(data, ignore_index=True) if data else None
 
@@ -35,20 +57,21 @@ def generate_box_plots(df, entity_name):
     metriche = ['accuracy', 'loss', 'energia(J)', 'banda(MB)', 'flops_inferenza']
     
     for m in metriche:
-        if m not in df.columns: continue
-        plt.figure(figsize=(10, 6))
+        if m not in df.columns: 
+            continue
+            
+        fig, ax = plt.subplots(figsize=(10, 6))
         
-        # MODIFICA QUI: Aggiunto hue='Tecnica' e legend=False
-        sns.boxplot(data=df, x='Tecnica', y=m, hue='Tecnica', palette="Set2", legend=False)
+        sns.boxplot(data=df, x='Tecnica', y=m, hue='Tecnica', palette="Set2", legend=False, ax=ax)
+        sns.swarmplot(data=df, x='Tecnica', y=m, color="black", alpha=0.5, ax=ax)
         
-        # Anche lo swarmplot richiede hue per coerenza (opzionale ma consigliato)
-        sns.swarmplot(data=df, x='Tecnica', y=m, color="black", alpha=0.5)
+        # Linee verticali bianche sulla griglia
+        ax.grid(axis='x', color='white', linestyle='-', linewidth=1.5)
         
-        plt.title(f"Confronto Qualità Finale {m.upper()} - {entity_name}")
-        plt.xlabel("Tecnica")
-        plt.ylabel(m)
+        ax.set_xlabel("Technique")
+        ax.set_ylabel(METRIC_LABELS.get(m, m))
+        
         plt.tight_layout()
-        
         plt.savefig(os.path.join(entity_dir, f"box_compare_{m.split('(')[0]}.png"))
         plt.close()
 

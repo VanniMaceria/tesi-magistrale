@@ -10,7 +10,7 @@
 // ============================================================================
 // CONFIGURAZIONE RETE E BROKER MQTT
 // ============================================================================
-const char* MQTT_SERVER   = "10.0.0.102"; // IP Broker MQTT / Server FL
+const char* MQTT_SERVER   = "10.0.0.6"; // IP Broker MQTT / Server FL
 const int   MQTT_PORT     = 1883;
 
 const char* CLIENT_ID     = "client_0"; 
