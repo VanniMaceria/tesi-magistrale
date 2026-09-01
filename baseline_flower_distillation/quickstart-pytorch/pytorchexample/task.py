@@ -204,15 +204,15 @@ def get_model_iot_metrics():
 
 def load_proxy_dataset(num_samples=500, seed=42):
     """
-    Carica un piccolo set di dati (Proxy) dallo stesso dataset dei client
+    Carica un piccolo set di dati (Proxy) del train set del dataset scelto
     per la distillazione lato server.
     """
     from datasets import load_dataset
     from torchvision.transforms import Compose, Normalize, ToTensor
     from torch.utils.data import DataLoader
 
-    # Carichiamo un sottoinsieme casuale del test set di Fashion-MNIST come proxy dataset (500 campioni di default)
-    ds = load_dataset("flwrlabs/femnist", split="train")
+    # Carichiamo un sottoinsieme casuale del test set di del dataset come proxy dataset (500 campioni di default)
+    ds = load_dataset("flwrlabs/femnist", split="train") # in questo caso FEMNIST ha solo lo split "train"
     #ds = ds.rename_column("image", "img") # per MNIST e FASHION-MNIST
     ds = ds.rename_columns({"image": "img", "character": "label"})  # per FEMNIST
     proxy_ds = ds.shuffle(seed=seed).select(range(num_samples))
