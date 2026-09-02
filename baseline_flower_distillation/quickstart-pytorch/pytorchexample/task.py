@@ -27,7 +27,7 @@ class TinyNetIoT(nn.Module):
         # Fully connected layers
         self.fc1 = nn.Linear(8 * 4 * 4, 60) # (8 out_channels di conv2) * (4x4 dimensione spaziale dopo conv+pool) = 128
         self.fc2 = nn.Linear(60, 40)  # 60 neuroni in ingresso, 40 in uscita
-        self.fc3 = nn.Linear(40, 62)  # 40 neuroni in ingresso, 10 classi in uscita (corrispondenti alle cifre 0-9) o (62 classi se si lavora con FEMNIST))
+        self.fc3 = nn.Linear(40, 10)  # 40 neuroni in ingresso, 10 classi in uscita (corrispondenti alle cifre 0-9) o (62 classi se si lavora con FEMNIST))
 
     def forward(self, x):
         x = self.pool(F.relu(self.conv1(x)))
@@ -41,11 +41,11 @@ class TinyNetIoT(nn.Module):
 fds = None  # Cache FederatedDataset
 
 # Per MNIST
-#pytorch_transforms = Compose([ToTensor(), Normalize((0.1307,), (0.3081,))])
+pytorch_transforms = Compose([ToTensor(), Normalize((0.1307,), (0.3081,))])
 # Per Fashion-MNIST
 #pytorch_transforms = Compose([ToTensor(), Normalize((0.2860,), (0.3530,))])
 # Per FEMNIST
-pytorch_transforms = Compose([ToTensor(), Normalize((0.5,), (0.5,))])
+#pytorch_transforms = Compose([ToTensor(), Normalize((0.5,), (0.5,))])
 
 def set_all_seeds(seed):
     """Set all random seeds to make results reproducible."""
@@ -79,7 +79,7 @@ def apply_transforms(batch):
 
 
 def load_data(partition_id: int, num_partitions: int, batch_size: int, seed: int = 42):   # seed va a 42 se non lo specifico da shell
-    """Load partition flwrlabs/femnist data for clients."""
+    """Load partition dataset_name data for clients."""
     # Only initialize `FederatedDataset` once
     global fds
     if fds is None:
@@ -87,13 +87,13 @@ def load_data(partition_id: int, num_partitions: int, batch_size: int, seed: int
         #natural_id_partitioner = NaturalIdPartitioner(partition_by="writer_id")  # per FEMNIST
         #dirichlet_partitioner = DirichletPartitioner(num_partitions=num_partitions, alpha=0.1, partition_by="label")
         fds = FederatedDataset(
-            dataset="flwrlabs/femnist",
+            dataset="ylecun/mnist",
             partitioners={"train": partitioner},
         )
     partition = fds.load_partition(partition_id)
     #MNIST dataset has "image" column, but our model expects "img" column, so we rename it here
-    #partition = partition.rename_column("image", "img")  # per MNIST e FASHION-MNIST
-    partition = partition.rename_columns({"image": "img", "character": "label"})  # per FEMNIST
+    partition = partition.rename_column("image", "img")  # per MNIST e FASHION-MNIST
+    #partition = partition.rename_columns({"image": "img", "character": "label"})  # per FEMNIST
     # Divide data on each node: 80% train, 20% test
     partition_train_test = partition.train_test_split(test_size=0.2, seed=seed)
     # Construct dataloaders
@@ -104,37 +104,40 @@ def load_data(partition_id: int, num_partitions: int, batch_size: int, seed: int
     testloader = DataLoader(partition_train_test["test"], batch_size=batch_size)
     return trainloader, testloader
 
-
-"""
-def load_centralized_dataset():
-    """"""Load the entire test set as a centralized dataset for evaluation on the server""""""
-    test_dataset = load_dataset("flwrlabs/femnist", split="test")
-    test_dataset = test_dataset.rename_column("image", "img")
-    dataset = test_dataset.with_format("torch").with_transform(apply_transforms)
+def load_centralized_dataset(num_proxy_samples=500):
+    """Valutazione Server sul dataset: (esclude i primi 500 del proxy)."""
+    # 1. Carica lo split ufficiale di test di MNIST (10.000 campioni)
+    test_dataset = load_dataset("ylecun/mnist", split="test")
+    
+    # 2. Taglio: prende dal campione 500 in poi (campioni 500-9999)
+    eval_dataset = test_dataset.select(range(num_proxy_samples, len(test_dataset)))
+    
+    # 3. Rinomina solo 'image' -> 'img' (la colonna 'label' esiste già in MNIST)
+    eval_dataset = eval_dataset.rename_column("image", "img")
+    dataset = eval_dataset.with_format("torch").with_transform(apply_transforms)
+    
     return DataLoader(dataset, batch_size=128)
-"""
 
-
-# variante per FEMNIST
-def load_centralized_dataset():
-    """Load a subset of the data as a centralized dataset for evaluation on the server"""
-    # 1. Carica l'unico split esistente ("train")
+# per FEMNIST
+"""def load_centralized_dataset(num_proxy_samples=500):
+    """"""Load the held-out test set for global evaluation, EXCLUDING the distillation proxy slice.""""""
+    # 1. Carica il dataset completo (per FEMNIST lo split è 'train')
     full_dataset = load_dataset("flwrlabs/femnist", split="train")
     
-    # 2. Suddividilo dinamicamente (es. 80% train, 20% test) usando un seed fisso
+    # 2. Isola la quota di test globale (20%) con seed fisso deterministico
     split_dataset = full_dataset.train_test_split(test_size=0.2, seed=42)
-    
-    # 3. Estrai solo la parte di test per la valutazione del server
     test_dataset = split_dataset["test"]
     
-    # 4. Rinomina le colonne come già facevi
-    test_dataset = test_dataset.rename_columns({"image": "img", "character": "label"})
+    # 3. TAGLIO: escludiamo i primi 500 campioni (usati dalla distillazione)
+    # Prendiamo solo dal campione 500 fino alla fine del test set
+    eval_dataset = test_dataset.select(range(num_proxy_samples, len(test_dataset)))
     
-    # 5. Applica le trasformazioni PyTorch
-    dataset = test_dataset.with_format("torch").with_transform(apply_transforms)
+    # 4. Rinomina colonne e applica trasformazioni PyTorch
+    eval_dataset = eval_dataset.rename_columns({"image": "img", "character": "label"})
+    dataset = eval_dataset.with_format("torch").with_transform(apply_transforms)
     
     return DataLoader(dataset, batch_size=128)
-
+"""
 
 def train(net, trainloader, epochs, lr, device):
     """Train the model on the training set."""
@@ -144,8 +147,8 @@ def train(net, trainloader, epochs, lr, device):
 
     net.to(device)  # move model to GPU if available
     criterion = torch.nn.CrossEntropyLoss().to(device)
-    #optimizer = torch.optim.SGD(net.parameters(), lr=lr)   #momentum=0.9 se batch-size è 32
-    optimizer = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4) #optimizer per FEMNIST
+    optimizer = torch.optim.SGD(net.parameters(), lr=lr)   #momentum=0.9 se batch-size è 32
+    #optimizer = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4) #optimizer per FEMNIST
     num_examples = len(trainloader.dataset)
     net.train()
     running_loss = 0.0
@@ -203,27 +206,33 @@ def get_model_iot_metrics():
     return int(params), int(flops)
 
 def load_proxy_dataset(num_samples=500, seed=42):
-    """
-    Carica un piccolo set di dati (Proxy) del train set del dataset scelto
-    per la distillazione lato server.
-    """
-    from datasets import load_dataset
-    from torchvision.transforms import Compose, Normalize, ToTensor
-    from torch.utils.data import DataLoader
-
-    # Carichiamo un sottoinsieme casuale del test set di del dataset come proxy dataset (500 campioni di default)
-    ds = load_dataset("flwrlabs/femnist", split="train") # in questo caso FEMNIST ha solo lo split "train"
-    #ds = ds.rename_column("image", "img") # per MNIST e FASHION-MNIST
-    ds = ds.rename_columns({"image": "img", "character": "label"})  # per FEMNIST
-    proxy_ds = ds.shuffle(seed=seed).select(range(num_samples))
+    """Distillazione Server sul dataset: solo i primi 500 campioni del test set."""
+    test_dataset = load_dataset("ylecun/mnist", split="test")
     
-    # Definiamo le trasformazioni (identiche a quelle globali nel file)
-    #pytorch_transforms = Compose([ToTensor(), Normalize((0.2860,), (0.3530,))]) # per Fashion-MNIST
-    pytorch_transforms = Compose([ToTensor(), Normalize((0.5,), (0.5,))])  # per FEMNIST
-    def apply_proxy_transforms(batch):
-        batch["img"] = [pytorch_transforms(img) for img in batch["img"]]
-        return batch
+    # Taglio: prende solo i primi 500 campioni (0-499)
+    proxy_ds = test_dataset.select(range(num_samples))
     
-    # Applichiamo le trasformazioni e creiamo il DataLoader
-    proxy_ds = proxy_ds.with_transform(apply_proxy_transforms)
+    proxy_ds = proxy_ds.rename_column("image", "img")
+    proxy_ds = proxy_ds.with_transform(apply_transforms)
+    
     return DataLoader(proxy_ds, batch_size=32)
+
+#per FEMNIST
+"""
+def load_proxy_dataset(num_samples=500, seed=42):
+    # 1. Carica il dataset completo
+    full_dataset = load_dataset("flwrlabs/femnist", split="train")
+    
+    # 2. Isola la stessa identica quota di test globale (20%) con lo stesso seed fisso
+    split_dataset = full_dataset.train_test_split(test_size=0.2, seed=42)
+    test_dataset = split_dataset["test"]
+    
+    # 3. TAGLIO: prendiamo solo i primi 500 campioni (intervallo 0:500)
+    proxy_ds = test_dataset.select(range(num_samples))
+    
+    # 4. Rinomina colonne e applica trasformazioni PyTorch
+    proxy_ds = proxy_ds.rename_columns({"image": "img", "character": "label"})
+    proxy_ds = proxy_ds.with_transform(apply_transforms)
+    
+    return DataLoader(proxy_ds, batch_size=32)
+"""
