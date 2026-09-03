@@ -54,14 +54,21 @@ def main():
     client.connect(MQTT_BROKER, MQTT_PORT, 60)
     client.loop_start()
 
-    print("[Server] Caricamento del Proxy Dataset (2500 campioni da MNIST)...")
+    print("[Server] Caricamento del dataset MNIST per Proxy Set e Test Set disgiunti...")
     transform = transforms.Compose([transforms.ToTensor()])
     mnist_test = datasets.MNIST(root='./data', train=False, download=True, transform=transform)
     
+    # 1. Proxy Transfer Dataset (2500 campioni: indici 0 - 2499)
     proxy_indices = list(range(2500))
     proxy_subset = Subset(mnist_test, proxy_indices)
     proxy_loader = DataLoader(proxy_subset, batch_size=32, shuffle=True)
-    test_loader = DataLoader(mnist_test, batch_size=64, shuffle=False)
+
+    # 2. Test Set per la Valutazione Globale (7500 campioni disgiunti: indici 2500 - 9999)
+    test_indices = list(range(2500, len(mnist_test)))
+    test_subset = Subset(mnist_test, test_indices)
+    test_loader = DataLoader(test_subset, batch_size=64, shuffle=False)
+
+    print(f"[Server] Dataset configurati: Proxy Set = {len(proxy_subset)} campioni | Test Set = {len(test_subset)} campioni (Disgiunti)")
 
     server_model = ServerMLP() 
     kd_manager = KnowledgeDistillationManager(temperature=3.0, epochs=3, lr=0.01)
@@ -99,9 +106,9 @@ def main():
                     client_models_dict, server_model, proxy_loader
                 )
                 
-                # Valutazione globale dell'accuracy sul test set
+                # Valutazione globale dell'accuracy sul test set disgiunto (7500 campioni non visti)
                 global_accuracy = evaluate_model(updated_server_model, test_loader)
-                print(f"\n >>> [ACCURACY MODELLO GLOBALE SERVER] -> {global_accuracy:.2f}% <<<\n")
+                print(f"\n >>> [ACCURACY MODELLO GLOBALE SERVER ({len(test_subset)} campioni)] -> {global_accuracy:.2f}% <<<\n")
                 
                 new_binary_weights = serialize_model_to_binary(updated_server_model)
                 print(f"[MQTT] Distribuzione nuova rete globale in broadcast ({len(new_binary_weights)} byte) sul topic {TOPIC_GLOBAL_WEIGHTS}...")
