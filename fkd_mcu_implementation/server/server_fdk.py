@@ -8,7 +8,7 @@ from distillation import KnowledgeDistillationManager
 # ============================================================================
 # CONFIGURAZIONE RETE E MQTT (Multi-Client)
 # ============================================================================
-MQTT_BROKER = "10.0.0.6"
+MQTT_BROKER = "10.0.0.107"
 MQTT_PORT = 1883
 TOPIC_COMMAND = "fl/global/command"
 TOPIC_GLOBAL_WEIGHTS = "fl/global/global_weights" # Topic unico di broadcast in discesa (con Retain)
@@ -68,7 +68,7 @@ def main():
     test_subset = Subset(mnist_test, test_indices)
     test_loader = DataLoader(test_subset, batch_size=64, shuffle=False)
 
-    print(f"[Server] Dataset configurati: Proxy Set = {len(proxy_subset)} campioni | Test Set = {len(test_subset)} campioni (Disgiunti)")
+    print(f"[Server] Dataset configurati: Proxy Set = {len(proxy_subset)} campioni | Test Set = {len(test_subset)} campioni")
 
     server_model = ServerMLP() 
     kd_manager = KnowledgeDistillationManager(temperature=3.0, epochs=3, lr=0.01)
