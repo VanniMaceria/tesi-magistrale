@@ -8,7 +8,7 @@ from distillation import KnowledgeDistillationManager
 # ============================================================================
 # CONFIGURAZIONE RETE E MQTT (Multi-Client)
 # ============================================================================
-MQTT_BROKER = "10.0.0.107"
+MQTT_BROKER = "10.0.0.104"
 MQTT_PORT = 1883
 TOPIC_COMMAND = "fl/global/command"
 TOPIC_GLOBAL_WEIGHTS = "fl/global/global_weights" # Topic unico di broadcast in discesa (con Retain)
