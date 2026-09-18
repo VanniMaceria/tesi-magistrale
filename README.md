@@ -22,7 +22,14 @@ The development of a standard Federated Learning environment to establish a perf
 The core of the thesis involves the application of complexity-reduction techniques to the baseline. The study evaluates the trade-off between model performance and resource efficiency using:
 * **Pruning**: Systematic removal of redundant weights to sparsify the model;
 * **Quantization**: Reducing weight precision (e.g., from Float32 to Int8/Float16) to optimize memory and bandwidth;
-* **Knowledge Distillation**: Utilizing "Teacher-Student" architectures to transfer knowledge to ultra-lightweight models;
+* **Knowledge Distillation**: Utilizing "Teacher-Student" architectures to transfer knowledge to ultra-lightweight models.
+
+### Phase 3: Physical Implementation
+Federated Knowledge Distillation is the compression strategy chosen for a physical implementation using ESP32-S3 as clients (teachers) and a Distillation Server (student) to optimize the global model. Model transmission is handled using an MQTT broker via the following dedicated topic tree:
+
+* `fl/global/command`: Global Command Channel where the server broadcasts JSON-formatted control envelopes (e.g., `{"action": "train"}`) to trigger synchronous local training across all subscribed microcontrollers;
+* `fl/client_i/weights`: Dedicated Client Uplink where client node $i$ streams its serialized, continuous binary payload of updated parameters upon completing local gradient iterations;
+* `fl/global/global_weights`: Global Broadcast Downlink where the central coordinator publishes the updated global parameters as a retained message (`retain=True`) following server-side distillation, ensuring immediate ingestion by active or newly connecting clients.
 
 ## 🧪 Experimental Setup
 The project utilizes a simulation-driven approach to perform tests. By varying parameters such as the number of participating clients, data distribution (IID vs. Non-IID), and local training intensity (epochs/rounds), the research seeks to identify the most "efficient" technique for IoT deployments—prioritizing energy and bandwidth savings even at the cost of marginal accuracy loss. [Flower](https://flower.ai/) 1.27.0 is the framework that has been choosen to perform this task.
@@ -32,6 +39,10 @@ The project utilizes a simulation-driven approach to perform tests. By varying p
 * **baseline_flower_distillation**: This directory integrates **Knowledge Distillation (KD)** logic within the federated environment. Unlike the standard approach, this configuration introduces a custom server-side aggregation strategy where **client models (Teachers)** train a more compact **global model (Student)** using a proxy dataset. This module aims to evaluate how knowledge transfer can mitigate accuracy degradation resulting from model compression, enabling the deployment of extremely lightweight neural architectures optimized for IoT devices;
 * **baseline_flower_ordered_dropout**: This directory implements the **Ordered Dropout (FjORD)** mechanism within the federated framework. Unlike static pruning, this approach enables dynamic model elasticity by training a single global model across multiple sub-architecture configurations (profiles). Each participating IoT node is assigned a specific width **profile** ($p \in \{0.25, 0.5, 0.75, 1.0\}$) based on its **hardware constraints**, allowing the system to maintain a single set of nested weights that remain functional at various levels of compression. This module is critical for evaluating the trade-off between computational efficiency (FLOPs/MACs reduction) and global predictive performance in heterogeneous resource environments;
 * **baseline_flower_quantization**: This directory implements **Quantization Aware Training (QAT)** to evaluate the model's resilience to low-precision constraints within a federated environment. By integrating **Fake Quantization** nodes, the system simulates the rounding errors and limited dynamic range of **8-bit integers (int8)** during the **forward pass**. During the **backward pass**, the system maintains high-precision **float32** gradients to ensure numerical stability and prevent gradient vanishing. This configuration allows the model to learn to compensate for quantization noise while keeping "latent" weights in a high-precision format for gradient-based updates. This module is essential for characterizing the impact of reduced precision on global accuracy and for measuring the **theoretical bandwidth savings (75%)** expected when deploying the model on integer-only IoT hardware.
+
+<p align="center">
+  <img width="60%" height="35%" alt="fedcomp-workflow" src="https://github.com/user-attachments/assets/e0d7dab7-9f81-4320-9587-aa6318045290" />
+</p>
 
 ## ✍ Metrics Storing
 Each experiment/simulation will save the following files in CSV format:
