@@ -9,7 +9,7 @@ While FL is widely adopted for privacy-preserving distributed learning, its exec
 The primary objective of this study is to bridge the gap between high-performance Federated Learning and constrained edge computing. The project aims to identify, implement, and compare various **model compression and optimization techniques** to minimize the footprint of neural networks during the federated training process.
 
 ## 📈 Methodology
-The research follows a two-phase comparative approach:
+The research follows a three-phase comparative approach:
 
 ### Phase 1: Baseline Characterization
 The development of a standard Federated Learning environment to establish a performance baseline. During this phase, key metrics are collected from uncompressed models, including:
